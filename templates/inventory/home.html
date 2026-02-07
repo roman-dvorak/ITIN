@@ -8,13 +8,13 @@
     <p class="text-sm text-slate-600">Přehled inventáře a síťových dat.</p>
   </div>
 
-  <section class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+  <section class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
     <article class="rounded-lg border border-slate-200 bg-white p-4">
       <p class="text-xs uppercase tracking-wide text-slate-500">Total Assets</p>
       <p class="mt-2 text-3xl font-semibold text-slate-900">{{ total_assets }}</p>
     </article>
     <article class="rounded-lg border border-slate-200 bg-white p-4">
-      <p class="text-xs uppercase tracking-wide text-slate-500">Computers</p>
+      <p class="text-xs uppercase tracking-wide text-slate-500">Computers + Notebooks</p>
       <p class="mt-2 text-3xl font-semibold text-slate-900">{{ total_computers }}</p>
     </article>
     <article class="rounded-lg border border-slate-200 bg-white p-4">
@@ -32,6 +32,26 @@
     <article class="rounded-lg border border-slate-200 bg-white p-4">
       <p class="text-xs uppercase tracking-wide text-slate-500">Active Guests</p>
       <p class="mt-2 text-3xl font-semibold text-slate-900">{{ active_guests }}</p>
+    </article>
+    <article class="rounded-lg border border-slate-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-wide text-slate-500">Assets With OS</p>
+      <p class="mt-2 text-3xl font-semibold text-slate-900">{{ assets_with_os }}</p>
+    </article>
+    <article class="rounded-lg border border-slate-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-wide text-slate-500">Assets Without OS</p>
+      <p class="mt-2 text-3xl font-semibold text-slate-900">{{ assets_without_os }}</p>
+    </article>
+    <article class="rounded-lg border border-slate-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-wide text-slate-500">Assets Without MAC</p>
+      <p class="mt-2 text-3xl font-semibold text-slate-900">{{ assets_without_mac }}</p>
+    </article>
+    <article class="rounded-lg border border-slate-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-wide text-slate-500">Active Interfaces</p>
+      <p class="mt-2 text-3xl font-semibold text-slate-900">{{ active_interfaces }}</p>
+    </article>
+    <article class="rounded-lg border border-slate-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-wide text-slate-500">Active Ports</p>
+      <p class="mt-2 text-3xl font-semibold text-slate-900">{{ active_ports }}</p>
     </article>
   </section>
 
@@ -60,10 +80,24 @@
         <canvas id="computer-activity-chart"></canvas>
       </div>
     </article>
+    <article class="rounded-lg border border-slate-200 bg-white p-4">
+      <h2 class="mb-3 text-lg font-medium">Assets by Group</h2>
+      <div class="mx-auto max-w-xs">
+        <canvas id="asset-group-chart"></canvas>
+      </div>
+    </article>
+    <article class="rounded-lg border border-slate-200 bg-white p-4">
+      <h2 class="mb-3 text-lg font-medium">Assets by Type</h2>
+      <div class="mx-auto max-w-xs">
+        <canvas id="asset-type-chart"></canvas>
+      </div>
+    </article>
   </section>
 
   {{ os_distribution|json_script:"os-distribution-data" }}
   {{ computer_activity_distribution|json_script:"computer-activity-data" }}
+  {{ group_distribution|json_script:"group-distribution-data" }}
+  {{ asset_type_distribution|json_script:"asset-type-distribution-data" }}
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
     function buildPieChart(elementId, dataScriptId, palette) {
@@ -105,6 +139,16 @@
       "computer-activity-chart",
       "computer-activity-data",
       ["#16a34a", "#dc2626"]
+    );
+    buildPieChart(
+      "asset-group-chart",
+      "group-distribution-data",
+      ["#0f172a", "#1e293b", "#334155", "#475569", "#64748b", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#a3a3a3"]
+    );
+    buildPieChart(
+      "asset-type-chart",
+      "asset-type-distribution-data",
+      ["#1d4ed8", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#0f172a"]
     );
   </script>
 {% endblock %}

@@ -17,6 +17,13 @@ from .models import (
 User = get_user_model()
 
 
+def _get_primary_os(asset):
+    if hasattr(asset, "_prefetched_objects_cache") and "os_entries" in asset._prefetched_objects_cache:
+        entries = asset._prefetched_objects_cache["os_entries"]
+        return entries[0] if entries else None
+    return asset.os_entries.select_related("family", "version").order_by("-id").first()
+
+
 def _raise_drf_validation(error: DjangoValidationError):
     raise serializers.ValidationError(error.message_dict if hasattr(error, "message_dict") else error.messages)
 
@@ -27,16 +34,59 @@ class UserLookupSerializer(serializers.ModelSerializer):
         fields = ("id", "email", "first_name", "last_name")
 
 
+class ApiLoginSerializer(serializers.Serializer):
+    username = serializers.CharField(required=False, allow_blank=False)
+    email = serializers.EmailField(required=False, allow_blank=False)
+    password = serializers.CharField(required=True, write_only=True, allow_blank=False)
+
+    def validate(self, attrs):
+        if not attrs.get("username") and not attrs.get("email"):
+            raise serializers.ValidationError({"username": "Provide either username or email."})
+        return attrs
+
+
 class GroupLookupSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrganizationalGroup
         fields = ("id", "name")
 
 
+class GroupCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrganizationalGroup
+        fields = ("id", "name", "description", "default_vlan_id")
+        read_only_fields = ("id",)
+
+    def create(self, validated_data):
+        group = OrganizationalGroup(**validated_data)
+        try:
+            group.full_clean()
+        except DjangoValidationError as error:
+            _raise_drf_validation(error)
+        group.save()
+        return group
+
+
 class OSFamilyLookupSerializer(serializers.ModelSerializer):
     class Meta:
         model = OSFamily
         fields = ("id", "name", "vendor", "platform_type", "supports_domain_join")
+
+
+class OSFamilyCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OSFamily
+        fields = ("id", "name", "vendor", "platform_type", "supports_domain_join")
+        read_only_fields = ("id",)
+
+    def create(self, validated_data):
+        family = OSFamily(**validated_data)
+        try:
+            family.full_clean()
+        except DjangoValidationError as error:
+            _raise_drf_validation(error)
+        family.save()
+        return family
 
 
 class OSVersionLookupSerializer(serializers.ModelSerializer):
@@ -53,6 +103,23 @@ class OSVersionLookupSerializer(serializers.ModelSerializer):
             "end_of_support_date",
             "is_lts",
             "kernel_version",
+        )
+
+
+class AssetOSNestedSerializer(serializers.ModelSerializer):
+    family = OSFamilyLookupSerializer(read_only=True)
+    version = OSVersionLookupSerializer(read_only=True)
+
+    class Meta:
+        model = AssetOS
+        fields = (
+            "id",
+            "family",
+            "version",
+            "patch_level",
+            "installed_on",
+            "support_state",
+            "auto_updates_enabled",
         )
 
 
@@ -290,6 +357,136 @@ class NetworkInterfaceUpdateSerializer(serializers.ModelSerializer):
         return instance
 
 
+class NetworkInterfaceCreateSerializer(serializers.ModelSerializer):
+    asset = serializers.PrimaryKeyRelatedField(queryset=Asset.objects.all())
+    port = serializers.PrimaryKeyRelatedField(queryset=Port.objects.all(), allow_null=True, required=False)
+    network = serializers.PrimaryKeyRelatedField(
+        queryset=Network.objects.all(),
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    address = serializers.IPAddressField(write_only=True, required=False, allow_null=True)
+    ip_status = serializers.ChoiceField(
+        write_only=True,
+        required=False,
+        choices=IPAddress.Status.choices,
+        default=IPAddress.Status.STATIC,
+    )
+    hostname = serializers.CharField(write_only=True, required=False, allow_blank=True)
+
+    class Meta:
+        model = NetworkInterface
+        fields = (
+            "asset",
+            "identifier",
+            "mac_address",
+            "port",
+            "notes",
+            "active",
+            "network",
+            "address",
+            "ip_status",
+            "hostname",
+        )
+
+    def validate(self, attrs):
+        asset = attrs["asset"]
+        port = attrs.get("port")
+        if port is not None and port.asset_id != asset.id:
+            raise serializers.ValidationError({"port": "Selected port must belong to the same asset."})
+
+        has_network = attrs.get("network") is not None
+        has_address = attrs.get("address") not in (None, "")
+        if has_network != has_address:
+            raise serializers.ValidationError(
+                {"address": "network and address must be provided together when setting active IP."}
+            )
+
+        user = getattr(self.context.get("request"), "user", None)
+        if user and not user.is_superuser:
+            if not asset.groups.filter(id__in=user.asset_admin_groups.values("id")).exists():
+                raise serializers.ValidationError(
+                    {"asset": "Missing permission to create interfaces for this asset."}
+                )
+        return attrs
+
+    def create(self, validated_data):
+        network = validated_data.pop("network", None)
+        address = validated_data.pop("address", None)
+        ip_status = validated_data.pop("ip_status", IPAddress.Status.STATIC)
+        hostname = validated_data.pop("hostname", "")
+        interface = NetworkInterface(**validated_data)
+        try:
+            interface.full_clean()
+        except DjangoValidationError as error:
+            _raise_drf_validation(error)
+        interface.save()
+
+        if network and address:
+            ip_record = IPAddress(
+                network=network,
+                address=address,
+                status=ip_status,
+                assigned_interface=interface,
+                hostname=hostname,
+                active=True,
+            )
+            try:
+                ip_record.full_clean()
+            except DjangoValidationError as error:
+                _raise_drf_validation(error)
+            ip_record.save()
+        return interface
+
+
+class PortCreateSerializer(serializers.ModelSerializer):
+    asset = serializers.PrimaryKeyRelatedField(queryset=Asset.objects.all())
+
+    class Meta:
+        model = Port
+        fields = ("asset", "name", "port_kind", "notes", "active")
+
+    def validate(self, attrs):
+        asset = attrs["asset"]
+        user = getattr(self.context.get("request"), "user", None)
+        if user and not user.is_superuser:
+            if not asset.groups.filter(id__in=user.asset_admin_groups.values("id")).exists():
+                raise serializers.ValidationError({"asset": "Missing permission to create ports for this asset."})
+
+        duplicate = Port.objects.filter(asset=asset, name=attrs["name"])
+        if duplicate.exists():
+            raise serializers.ValidationError({"name": "Port name must be unique per asset."})
+        return attrs
+
+    def create(self, validated_data):
+        port = Port(**validated_data)
+        try:
+            port.full_clean()
+        except DjangoValidationError as error:
+            _raise_drf_validation(error)
+        port.save()
+        return port
+
+
+class AssetPortInterfaceCreateSerializer(serializers.Serializer):
+    port_name = serializers.CharField(required=True, allow_blank=False, max_length=120)
+    port_kind = serializers.ChoiceField(required=False, choices=Port.PortKind.choices, default=Port.PortKind.RJ45)
+    port_notes = serializers.CharField(required=False, allow_blank=True, default="")
+    port_active = serializers.BooleanField(required=False, default=True)
+
+    interface_identifier = serializers.CharField(required=True, allow_blank=False, max_length=120)
+    interface_mac_address = serializers.CharField(required=False, allow_blank=True, allow_null=True, default="")
+    interface_notes = serializers.CharField(required=False, allow_blank=True, default="")
+    interface_active = serializers.BooleanField(required=False, default=True)
+
+    def validate_port_name(self, value):
+        return value.strip()
+
+    def validate_interface_identifier(self, value):
+        return value.strip()
+
+
 class PortUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Port
@@ -322,7 +519,11 @@ class AssetUpdateSerializer(serializers.ModelSerializer):
         many=True,
         required=False,
     )
-    owner = serializers.PrimaryKeyRelatedField(queryset=User.objects.filter(is_active=True), required=False)
+    owner = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.filter(is_active=True),
+        required=False,
+        allow_null=True,
+    )
     os_family = serializers.PrimaryKeyRelatedField(
         queryset=OSFamily.objects.all(),
         required=False,
@@ -360,7 +561,7 @@ class AssetUpdateSerializer(serializers.ModelSerializer):
 
         if os_version not in (serializers.empty, None):
             if os_family in (serializers.empty, None):
-                existing = getattr(self.instance, "asset_os", None)
+                existing = _get_primary_os(self.instance)
                 if existing is None:
                     raise serializers.ValidationError(
                         {"os_family": "os_family is required when setting os_version."}
@@ -395,7 +596,9 @@ class AssetUpdateSerializer(serializers.ModelSerializer):
             if os_family is None:
                 AssetOS.objects.filter(asset=instance).delete()
             else:
-                os_record, _ = AssetOS.objects.get_or_create(asset=instance, defaults={"family": os_family})
+                os_record = _get_primary_os(instance)
+                if os_record is None:
+                    os_record = AssetOS(asset=instance, family=os_family)
                 os_record.family = os_family
                 os_record.version = None if os_version in (serializers.empty, None) else os_version
                 try:
@@ -407,12 +610,102 @@ class AssetUpdateSerializer(serializers.ModelSerializer):
         return instance
 
 
+class AssetCreateSerializer(serializers.ModelSerializer):
+    groups = serializers.PrimaryKeyRelatedField(
+        queryset=OrganizationalGroup.objects.all(),
+        many=True,
+        required=False,
+    )
+    owner = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.filter(is_active=True),
+        required=False,
+        allow_null=True,
+    )
+    os_family = serializers.PrimaryKeyRelatedField(
+        queryset=OSFamily.objects.all(),
+        required=False,
+        allow_null=True,
+        write_only=True,
+    )
+    os_version = serializers.PrimaryKeyRelatedField(
+        queryset=OSVersion.objects.all(),
+        required=False,
+        allow_null=True,
+        write_only=True,
+    )
+
+    class Meta:
+        model = Asset
+        fields = (
+            "name",
+            "asset_type",
+            "asset_tag",
+            "serial_number",
+            "manufacturer",
+            "model",
+            "owner",
+            "groups",
+            "status",
+            "notes",
+            "metadata",
+            "os_family",
+            "os_version",
+        )
+
+    def validate(self, attrs):
+        user = getattr(self.context.get("request"), "user", None)
+        if user and not user.is_superuser and not user.asset_admin_groups.exists():
+            raise serializers.ValidationError({"detail": "Missing permission to create assets."})
+
+        groups = attrs.get("groups", [])
+        if user and not user.is_superuser:
+            if not groups:
+                raise serializers.ValidationError({"groups": "At least one group is required for new assets."})
+            allowed_ids = set(user.asset_admin_groups.values_list("id", flat=True))
+            if any(group.id not in allowed_ids for group in groups):
+                raise serializers.ValidationError({"groups": "Group assignment is outside your managed groups."})
+
+        os_family = attrs.get("os_family")
+        os_version = attrs.get("os_version")
+        if os_version is not None and os_family is None:
+            raise serializers.ValidationError({"os_family": "os_family is required when setting os_version."})
+        if os_version is not None and os_version.family_id != os_family.id:
+            raise serializers.ValidationError({"os_version": "Selected OS version must belong to selected family."})
+        return attrs
+
+    def create(self, validated_data):
+        user = getattr(self.context.get("request"), "user", None)
+        os_family = validated_data.pop("os_family", None)
+        os_version = validated_data.pop("os_version", None)
+        groups = validated_data.pop("groups", [])
+        asset = Asset(**validated_data)
+        asset._skip_default_connectivity = True
+        try:
+            asset.full_clean()
+        except DjangoValidationError as error:
+            _raise_drf_validation(error)
+        asset.save()
+
+        if groups:
+            asset.groups.set(groups)
+
+        if os_family is not None:
+            os_record = AssetOS(asset=asset, family=os_family, version=os_version)
+            try:
+                os_record.full_clean()
+            except DjangoValidationError as error:
+                _raise_drf_validation(error)
+            os_record.save()
+        return asset
+
+
 class AssetListSerializer(serializers.ModelSerializer):
     owner = UserLookupSerializer(read_only=True)
     groups = GroupLookupSerializer(many=True, read_only=True)
     os_family = serializers.SerializerMethodField()
     os_version = serializers.SerializerMethodField()
     os_features = serializers.SerializerMethodField()
+    os_entries = serializers.SerializerMethodField()
     ports = serializers.SerializerMethodField()
     unassigned_interfaces = serializers.SerializerMethodField()
 
@@ -434,6 +727,7 @@ class AssetListSerializer(serializers.ModelSerializer):
             "os_family",
             "os_version",
             "os_features",
+            "os_entries",
             "ports",
             "unassigned_interfaces",
             "created_at",
@@ -441,24 +735,31 @@ class AssetListSerializer(serializers.ModelSerializer):
         )
 
     def get_os_family(self, obj):
-        if not hasattr(obj, "asset_os"):
+        os_record = _get_primary_os(obj)
+        if os_record is None:
             return None
-        return {"id": obj.asset_os.family_id, "name": obj.asset_os.family.name}
+        return {"id": os_record.family_id, "name": os_record.family.name}
 
     def get_os_version(self, obj):
-        if not hasattr(obj, "asset_os") or obj.asset_os.version is None:
+        os_record = _get_primary_os(obj)
+        if os_record is None or os_record.version is None:
             return None
-        return {"id": obj.asset_os.version_id, "version": obj.asset_os.version.version}
+        return {"id": os_record.version_id, "version": os_record.version.version}
 
     def get_os_features(self, obj):
-        if not hasattr(obj, "asset_os"):
+        os_record = _get_primary_os(obj)
+        if os_record is None:
             return None
         return {
-            "patch_level": obj.asset_os.patch_level,
-            "installed_on": obj.asset_os.installed_on,
-            "support_state": obj.asset_os.support_state,
-            "auto_updates_enabled": obj.asset_os.auto_updates_enabled,
+            "patch_level": os_record.patch_level,
+            "installed_on": os_record.installed_on,
+            "support_state": os_record.support_state,
+            "auto_updates_enabled": os_record.auto_updates_enabled,
         }
+
+    def get_os_entries(self, obj):
+        entries = obj.os_entries.select_related("family", "version").order_by("-id")
+        return AssetOSNestedSerializer(entries, many=True).data
 
     def get_ports(self, obj):
         ports = obj.ports.order_by("name", "id")
@@ -471,7 +772,11 @@ class AssetListSerializer(serializers.ModelSerializer):
 
 class BulkAssetRowSerializer(serializers.Serializer):
     id = serializers.IntegerField()
-    owner = serializers.PrimaryKeyRelatedField(queryset=User.objects.filter(is_active=True), required=False)
+    owner = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.filter(is_active=True),
+        required=False,
+        allow_null=True,
+    )
     status = serializers.ChoiceField(choices=Asset.Status.choices, required=False)
     groups = serializers.PrimaryKeyRelatedField(
         queryset=OrganizationalGroup.objects.all(),

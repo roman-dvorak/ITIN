@@ -9,9 +9,15 @@ User = get_user_model()
 def apply_base_field_styles(fields):
     for field in fields.values():
         existing_class = field.widget.attrs.get("class", "")
-        field.widget.attrs["class"] = (
-            f"{existing_class} w-full rounded border border-slate-300 px-3 py-2 text-sm"
-        ).strip()
+        if isinstance(field.widget, forms.CheckboxInput):
+            field.widget.attrs["class"] = f"{existing_class} h-4 w-4 rounded border-slate-300".strip()
+            continue
+        base_class = "w-full rounded border border-slate-300 px-3 text-sm"
+        if isinstance(field.widget, forms.Textarea):
+            sizing_class = "py-2"
+        else:
+            sizing_class = "h-9 py-1.5"
+        field.widget.attrs["class"] = f"{existing_class} {base_class} {sizing_class}".strip()
 
 
 def apply_select2(fields, names):
@@ -105,6 +111,8 @@ class PortCreateForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         apply_base_field_styles(self.fields)
         apply_select2(self.fields, ["port_kind"])
+        self.fields["name"].widget.attrs["placeholder"] = "LAN1"
+        self.fields["notes"].widget.attrs["placeholder"] = "optional"
 
 
 class PortEditForm(PortCreateForm):
@@ -123,6 +131,9 @@ class PortInterfaceCreateForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.asset = asset
         apply_base_field_styles(self.fields)
+        self.fields["identifier"].widget.attrs["placeholder"] = "eth0"
+        self.fields["mac_address"].widget.attrs["placeholder"] = "aa:bb:cc:dd:ee:ff"
+        self.fields["notes"].widget.attrs["placeholder"] = "optional"
 
     def clean_identifier(self):
         identifier = self.cleaned_data["identifier"]
@@ -151,7 +162,7 @@ class AssetFilterForm(forms.Form):
 
 class PortInterfaceEditForm(PortInterfaceCreateForm):
     def save(self):
-        interface = super().save(commit=False)
+        interface = forms.ModelForm.save(self, commit=False)
         interface.full_clean()
         interface.save()
         return interface

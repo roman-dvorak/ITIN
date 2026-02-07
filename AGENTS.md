@@ -68,7 +68,8 @@ These rules guide AI-assisted development (GitHub Copilot / ChatGPT agents) for 
   * new permissions
   * new export logic
   * new bulk update behavior
-* During regular development, run only targeted tests for changed areas
+* Do not run tests during regular development unless the user explicitly asks for it
+* Run targeted tests only when explicitly requested by the user
 * Run the full test suite only when explicitly requested by the user
 
 ---

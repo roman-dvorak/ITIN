@@ -2,6 +2,8 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .api_views import (
+    ApiLoginView,
+    AssetPortInterfaceCreateAPIView,
     AssetViewSet,
     BulkAssetUpdateAPIView,
     BulkInterfaceUpdateAPIView,
@@ -22,6 +24,12 @@ router.register("interfaces", NetworkInterfaceViewSet, basename="interface")
 router.register("ports", PortViewSet, basename="port")
 
 urlpatterns = [
+    path("auth/login/", ApiLoginView.as_view(), name="api-login"),
+    path(
+        "assets/<int:asset_id>/port-interface/",
+        AssetPortInterfaceCreateAPIView.as_view(),
+        name="asset-port-interface-create",
+    ),
     path("assets/bulk_update/", BulkAssetUpdateAPIView.as_view(), name="asset-bulk-update"),
     path("interfaces/bulk_update/", BulkInterfaceUpdateAPIView.as_view(), name="interface-bulk-update"),
     path("", include(router.urls)),

@@ -1,0 +1,39 @@
+<div class="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-700">
+  <div>Filtered assets: {{ total_filtered }} | Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</div>
+  <div class="flex flex-wrap items-center gap-2">
+    <label class="text-xs text-slate-600" for="per-page-select-{{ control_id }}">Per page</label>
+    <select
+      id="per-page-select-{{ control_id }}"
+      class="h-[32px] rounded border border-slate-300 px-2 text-sm"
+      onchange="window.location='?{% if page_query_without_per_page %}{{ page_query_without_per_page }}&{% endif %}per_page=' + this.value"
+    >
+      {% for option in per_page_options %}
+        <option value="{{ option }}" {% if per_page == option %}selected{% endif %}>{{ option }}</option>
+      {% endfor %}
+    </select>
+
+    <div class="flex flex-wrap items-center gap-1">
+      {% if page_obj.has_previous %}
+        <a class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100" href="?{% if page_query %}{{ page_query }}&{% endif %}page=1">First</a>
+        <a class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+      {% endif %}
+
+      {% for page_number in page_obj.paginator.page_range %}
+        {% if page_number == 1 or page_number == page_obj.paginator.num_pages or page_number >= page_obj.number|add:"-4" and page_number <= page_obj.number|add:"4" %}
+          {% if page_number == page_obj.number %}
+            <span class="rounded bg-slate-900 px-3 py-1 text-white">{{ page_number }}</span>
+          {% else %}
+            <a class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_number }}">{{ page_number }}</a>
+          {% endif %}
+        {% elif page_number == page_obj.number|add:"-5" or page_number == page_obj.number|add:"5" %}
+          <span class="px-1 text-slate-400">...</span>
+        {% endif %}
+      {% endfor %}
+
+      {% if page_obj.has_next %}
+        <a class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+        <a class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.paginator.num_pages }}">Last</a>
+      {% endif %}
+    </div>
+  </div>
+</div>

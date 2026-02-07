@@ -1,11 +1,12 @@
 {% extends "base.html" %}
+{% load inventory_extras %}
 
-{% block title %}{{ asset.name }} | Asset Detail{% endblock %}
+{% block title %}{{ asset.name|default:"(no hostname)" }} | Asset Detail{% endblock %}
 
 {% block content %}
   <div class="mb-6 flex items-center justify-between">
     <div>
-      <h1 class="text-2xl font-semibold">{{ asset.name }}</h1>
+      <h1 class="text-2xl font-semibold">{{ asset.name|default:"(no hostname)" }}</h1>
       <p class="text-sm text-slate-600">Asset detail</p>
     </div>
     <div class="flex items-center gap-2">
@@ -27,9 +28,13 @@
         <div>
           <dt class="font-semibold text-slate-700">Owner</dt>
           <dd class="flex items-center gap-2">
-            <a href="{% url 'inventory:user-detail' asset.owner.id %}" class="hover:text-blue-700">{{ asset.owner.email }}</a>
-            {% if can_access_admin %}
-              <a href="{% url 'admin:auth_user_change' asset.owner.id %}" class="rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-100">Admin user</a>
+            {% if asset.owner %}
+              <a href="{% url 'inventory:user-detail' asset.owner.id %}" class="hover:text-blue-700">{{ asset.owner.email }}</a>
+              {% if can_access_admin %}
+                <a href="{% url 'admin:auth_user_change' asset.owner.id %}" class="rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-100">Admin user</a>
+              {% endif %}
+            {% else %}
+              <span class="text-slate-500">Unassigned</span>
             {% endif %}
           </dd>
         </div>
@@ -38,6 +43,18 @@
         <div><dt class="font-semibold text-slate-700">Serial</dt><dd>{{ asset.serial_number|default:"-" }}</dd></div>
         <div><dt class="font-semibold text-slate-700">Manufacturer</dt><dd>{{ asset.manufacturer|default:"-" }}</dd></div>
         <div><dt class="font-semibold text-slate-700">Model</dt><dd>{{ asset.model|default:"-" }}</dd></div>
+        <div>
+          <dt class="font-semibold text-slate-700">Description</dt>
+          <dd class="mt-1 rounded border border-slate-200 bg-slate-50 p-3">
+            {% if asset.notes %}
+              <div class="text-sm text-slate-800 [&>h1]:mb-2 [&>h1]:text-lg [&>h2]:mb-2 [&>h2]:text-base [&>p]:mb-2 [&>ul]:mb-2 [&>ul]:list-disc [&>ul]:pl-5 [&>ol]:mb-2 [&>ol]:list-decimal [&>ol]:pl-5 [&>pre]:overflow-x-auto [&>pre]:rounded [&>pre]:bg-slate-900 [&>pre]:p-2 [&>pre]:text-slate-100">
+                {{ asset.notes|render_markdown }}
+              </div>
+            {% else %}
+              <span class="text-slate-500">No description.</span>
+            {% endif %}
+          </dd>
+        </div>
       </dl>
     </article>
 
@@ -47,12 +64,17 @@
         <div>
           <dt class="font-semibold text-slate-700">Operating system</dt>
           <dd>
-            {% if asset.asset_os %}
-              {{ asset.asset_os.family.name }}{% if asset.asset_os.version %} {{ asset.asset_os.version.version }}{% endif %}
-              {% if asset.asset_os.patch_level %}<div class="text-slate-600">Patch level: {{ asset.asset_os.patch_level }}</div>{% endif %}
-              {% if asset.asset_os.installed_on %}<div class="text-slate-600">Installed: {{ asset.asset_os.installed_on }}</div>{% endif %}
-              <div class="text-slate-600">
-                Support: {{ asset.asset_os.get_support_state_display }} | Auto updates: {% if asset.asset_os.auto_updates_enabled %}On{% else %}Off{% endif %}
+            {% if asset.os_entries.all %}
+              <div class="space-y-1">
+                {% for os in asset.os_entries.all %}
+                  <div class="rounded border border-slate-200 bg-slate-50 px-2 py-1">
+                    <div>{{ os.family.name }}{% if os.version %} {{ os.version.version }}{% endif %}</div>
+                    <div class="text-xs text-slate-600">
+                      {% if os.patch_level %}Patch: {{ os.patch_level }} | {% endif %}
+                      Support: {{ os.get_support_state_display }} | Auto updates: {% if os.auto_updates_enabled %}On{% else %}Off{% endif %}
+                    </div>
+                  </div>
+                {% endfor %}
               </div>
             {% else %}
               -
@@ -70,6 +92,10 @@
           </dd>
         </div>
       </dl>
+      <details class="mt-4 rounded border border-slate-200 bg-slate-50 p-3">
+        <summary class="cursor-pointer text-sm font-semibold text-slate-700">Metadata (JSON)</summary>
+        <pre class="mt-2 overflow-x-auto rounded bg-slate-900 p-3 text-xs text-slate-100">{{ asset.metadata|pretty_json }}</pre>
+      </details>
     </article>
   </section>
 

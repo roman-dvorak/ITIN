@@ -97,6 +97,30 @@ class PageRoutingTests(TestCase):
         self.assertContains(response, self.asset.name)
         self.assertContains(response, second_asset.name)
 
+    def test_asset_list_shows_mac_preview_with_extra_badge(self):
+        NetworkInterface.objects.create(
+            asset=self.asset,
+            identifier="eth0-preview",
+        )
+        NetworkInterface.objects.create(
+            asset=self.asset,
+            identifier="eth1-preview",
+        )
+        NetworkInterface.objects.create(
+            asset=self.asset,
+            identifier="eth2-preview",
+        )
+        for idx, interface in enumerate(NetworkInterface.objects.filter(asset=self.asset).order_by("identifier")):
+            interface.mac_address = f"aa:bb:cc:11:22:{33 + idx:02d}"
+            interface.save(update_fields=["mac_address"])
+
+        self.client.force_login(self.user)
+        response = self.client.get("/asset/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "aa:bb:cc:11:22:33")
+        self.assertContains(response, "aa:bb:cc:11:22:34")
+        self.assertContains(response, "+2")
+
     def test_staff_user_list_is_scoped_and_available(self):
         grouped_user = User.objects.create_user(
             username="grouped-user",

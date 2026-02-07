@@ -105,13 +105,13 @@ Relations:
 Generic asset model enabling future types (monitors, printers, etc.).
 
 Fields:
-- name (unique, required)
-- asset_type (enum): COMPUTER (current), MONITOR (future), KEYBOARD (future), PRINTER (future), OTHER (future)
+- name / hostname (optional, not unique)
+- asset_type (enum): COMPUTER | NOTEBOOK | SERVER | MONITOR | KEYBOARD | DEVICE | NETWORK | PRINTER | MOBILE | TABLET | BYOD | OTHER
 - asset_tag (optional)
 - serial_number (optional)
 - manufacturer (optional)
 - model (optional)
-- owner (FK → User, required)
+- owner (FK → User, optional / nullable)
 - groups (M2M → OrganizationalGroup)
 - status (enum): ACTIVE | STORED | RETIRED | LOST
 - notes (optional)
@@ -284,9 +284,22 @@ Auth & CSRF:
 
 ## 11. API Design (DRF)
 
+OpenAPI / Swagger:
+- OpenAPI schema: `GET /api/schema/`
+- Swagger UI: `GET /api/docs/`
+- ReDoc: `GET /api/redoc/`
+
+Authentication:
+- `POST /api/auth/login/` with `username` or `email` and `password`
+- API supports session auth and token auth
+- Token header format: `Authorization: Token <token>`
+- Tokens are provisioned in Django admin only (no API endpoint creates tokens)
+
 Assets:
+- `POST /api/assets/`
 - `GET /api/assets/` (filters: q, group, owner, status, type)
 - `PATCH /api/assets/{id}/`
+- `POST /api/assets/{id}/port-interface/` (create port + interface and link both to asset)
 
 Bulk update:
 - `POST /api/assets/bulk_update/`
@@ -295,6 +308,7 @@ Bulk update:
   - returns per-row success/error
 
 Interfaces:
+- `POST /api/interfaces/`
 - `GET /api/interfaces/` (filters: q, asset, active)
 - `PATCH /api/interfaces/{id}/`
 
@@ -305,15 +319,147 @@ Interface bulk update:
   - returns per-row success/error
 
 Ports:
+- `POST /api/ports/`
 - `GET /api/ports/` (filters: q, asset, active)
 - `PATCH /api/ports/{id}/`
 
 Lookups:
 - `GET /api/users/?q=`
+- `POST /api/groups/` (superuser only)
 - `GET /api/groups/?q=`
+- `POST /api/os-families/` (superuser only)
 - `GET /api/os-families/?q=`
 - `GET /api/os-versions/?family_id=&q=`
 - `GET /api/networks/?q=`
+
+Request body examples:
+
+- `POST /api/auth/login/`
+```json
+{
+  "email": "admin@example.local",
+  "password": "secret"
+}
+```
+
+- `POST /api/assets/`
+```json
+{
+  "name": "atlas-lt-01",
+  "asset_type": "NOTEBOOK",
+  "owner": null,
+  "groups": [1, 2],
+  "status": "ACTIVE",
+  "asset_tag": "INV-1001",
+  "serial_number": "SN-001",
+  "manufacturer": "Dell",
+  "model": "Latitude 7450",
+  "notes": "User-facing notebook",
+  "metadata": {"location": "HQ-201"},
+  "os_family": 3,
+  "os_version": 12
+}
+```
+
+- `PATCH /api/assets/{id}/`
+```json
+{
+  "status": "STORED",
+  "owner": null,
+  "groups": [2],
+  "os_family": 3,
+  "os_version": 12
+}
+```
+
+- `POST /api/assets/{id}/port-interface/`
+```json
+{
+  "port_name": "LAN-2",
+  "port_kind": "RJ45",
+  "port_notes": "Docking station",
+  "interface_identifier": "eth1",
+  "interface_mac_address": "aa:bb:cc:11:22:33",
+  "interface_notes": "Secondary NIC"
+}
+```
+
+- `POST /api/ports/`
+```json
+{
+  "asset": 10,
+  "name": "WIFI",
+  "port_kind": "WIFI",
+  "notes": "Wireless adapter",
+  "active": true
+}
+```
+
+- `POST /api/interfaces/`
+```json
+{
+  "asset": 10,
+  "port": 55,
+  "identifier": "wlan0",
+  "mac_address": "aa:bb:cc:44:55:66",
+  "active": true,
+  "notes": "Primary wireless",
+  "network": 4,
+  "address": "10.20.30.40",
+  "ip_status": "STATIC",
+  "hostname": "atlas-lt-01"
+}
+```
+
+- `PATCH /api/interfaces/{id}/`
+```json
+{
+  "mac_address": "aa:bb:cc:44:55:99",
+  "network": 4,
+  "address": "10.20.30.41",
+  "ip_status": "STATIC",
+  "hostname": "atlas-lt-01"
+}
+```
+
+- `POST /api/assets/bulk_update/`
+```json
+{
+  "rows": [
+    {"id": 10, "status": "ACTIVE", "owner": null, "groups": [1]},
+    {"id": 11, "status": "STORED", "os_family": 3, "os_version": 12}
+  ]
+}
+```
+
+- `POST /api/interfaces/bulk_update/`
+```json
+{
+  "rows": [
+    {"id": 101, "mac_address": "aa:bb:cc:dd:ee:01"},
+    {"id": 102, "network": 4, "address": "10.20.30.50", "ip_status": "STATIC", "hostname": "node-102"}
+  ]
+}
+```
+
+- `POST /api/groups/` (superuser only)
+```json
+{
+  "name": "Operations",
+  "description": "Ops group",
+  "default_vlan_id": 120
+}
+```
+
+- `POST /api/os-families/` (superuser only)
+```json
+{
+  "name": "Ubuntu",
+  "vendor": "Canonical",
+  "platform_type": "SERVER",
+  "supports_domain_join": false
+}
+```
 
 ---
 

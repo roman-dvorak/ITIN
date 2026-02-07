@@ -22,7 +22,17 @@ from .forms import (
     PortInterfaceCreateForm,
     PortInterfaceEditForm,
 )
-from .models import Asset, GuestDevice, IPAddress, Network, NetworkInterface, OrganizationalGroup, OSFamily, Port
+from .models import (
+    Asset,
+    AssetOS,
+    GuestDevice,
+    IPAddress,
+    Network,
+    NetworkInterface,
+    OrganizationalGroup,
+    OSFamily,
+    Port,
+)
 
 User = get_user_model()
 
@@ -82,8 +92,8 @@ def with_asset_table_related(queryset):
     )
     return queryset.select_related("owner").prefetch_related(
         "groups",
-        "asset_os__family",
-        "asset_os__version",
+        "os_entries__family",
+        "os_entries__version",
         Prefetch("interfaces", queryset=interface_queryset),
     )
 
@@ -116,7 +126,7 @@ def filter_asset_queryset(queryset, params):
     if valid_group_ids:
         queryset = queryset.filter(groups__id__in=valid_group_ids)
     if valid_os_family_ids:
-        queryset = queryset.filter(asset_os__family_id__in=valid_os_family_ids)
+        queryset = queryset.filter(os_entries__family_id__in=valid_os_family_ids)
     return queryset.order_by("name").distinct()
 
 
@@ -132,7 +142,7 @@ def serialize_asset_row(asset):
         asset.name,
         asset.asset_type,
         asset.status,
-        asset.owner.email,
+        asset.owner.email if asset.owner_id else "",
         "; ".join(group.name for group in asset.groups.all()),
         asset.asset_tag,
         asset.serial_number,
@@ -243,33 +253,59 @@ class HomeView(LoginRequiredMixin, TemplateView):
             {"label": label, "code": code, "count": status_map.get(code, 0)}
             for code, label in Asset.Status.choices
         ]
-        computers = assets.filter(asset_type=Asset.AssetType.COMPUTER)
+        computers = assets.filter(asset_type__in=[Asset.AssetType.COMPUTER, Asset.AssetType.NOTEBOOK])
         active_computers = computers.filter(status=Asset.Status.ACTIVE).count()
         inactive_computers = computers.exclude(status=Asset.Status.ACTIVE).count()
+        assets_without_os = assets.filter(os_entries__isnull=True).distinct().count()
+        assets_with_os = assets.count() - assets_without_os
+        assets_without_mac = assets.exclude(interfaces__mac_address__isnull=False).distinct().count()
+        active_interfaces = NetworkInterface.objects.filter(asset__in=assets, active=True).count()
+        active_ports = Port.objects.filter(asset__in=assets, active=True).count()
         os_items = (
-            computers.filter(asset_os__isnull=False)
-            .values("asset_os__family__name")
+            computers.filter(os_entries__isnull=False)
+            .values("os_entries__family__name")
             .annotate(total=Count("id"))
-            .order_by("asset_os__family__name")
+            .order_by("os_entries__family__name")
         )
         os_distribution = [
-            {"label": item["asset_os__family__name"], "count": item["total"]}
+            {"label": item["os_entries__family__name"], "count": item["total"]}
             for item in os_items
         ]
-        without_os = computers.filter(asset_os__isnull=True).count()
+        without_os = computers.filter(os_entries__isnull=True).distinct().count()
         if without_os:
             os_distribution.append({"label": "Without OS", "count": without_os})
+        asset_type_distribution = [
+            {"label": label, "count": assets.filter(asset_type=code).count()}
+            for code, label in Asset.AssetType.choices
+        ]
+        groups_with_counts = list(
+            groups.annotate(total=Count("assets", filter=Q(assets__in=assets), distinct=True))
+            .filter(total__gt=0)
+            .order_by("-total", "name")
+        )
+        top_groups = groups_with_counts[:10]
+        other_groups_total = sum(group.total for group in groups_with_counts[10:])
+        group_distribution = [{"label": group.name, "count": group.total} for group in top_groups]
+        if other_groups_total:
+            group_distribution.append({"label": "Other", "count": other_groups_total})
 
         context.update(
             {
                 "total_assets": assets.count(),
-                "total_computers": assets.filter(asset_type=Asset.AssetType.COMPUTER).count(),
+                "total_computers": computers.count(),
                 "total_groups": groups.count(),
                 "total_networks": Network.objects.count(),
                 "active_guests": guest_devices.filter(enabled=True, valid_from__lte=now, valid_until__gte=now).count(),
                 "assets_with_ip": assets.filter(interfaces__ip_addresses__active=True).distinct().count(),
+                "assets_with_os": assets_with_os,
+                "assets_without_os": assets_without_os,
+                "assets_without_mac": assets_without_mac,
+                "active_interfaces": active_interfaces,
+                "active_ports": active_ports,
                 "status_cards": status_cards,
                 "os_distribution": os_distribution,
+                "asset_type_distribution": asset_type_distribution,
+                "group_distribution": group_distribution,
                 "computer_activity_distribution": [
                     {"label": "Active", "count": active_computers},
                     {"label": "Inactive", "count": inactive_computers},
@@ -283,7 +319,16 @@ class AssetListView(LoginRequiredMixin, ListView):
     model = Asset
     template_name = "inventory/asset_list.html"
     context_object_name = "assets"
-    paginate_by = 50
+    paginate_by = 25
+    page_size_options = (25, 50, 100, 200)
+
+    def get_paginate_by(self, queryset):
+        raw_value = (self.request.GET.get("per_page") or "").strip()
+        if raw_value.isdigit():
+            page_size = int(raw_value)
+            if page_size in self.page_size_options:
+                return page_size
+        return self.paginate_by
 
     def get_queryset(self):
         queryset = with_asset_table_related(visible_assets_for_user(self.request.user))
@@ -292,12 +337,32 @@ class AssetListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         current_queryset = self.object_list
-        owners = User.objects.filter(owned_assets__in=current_queryset).distinct().order_by("email")
-        groups = OrganizationalGroup.objects.filter(assets__in=current_queryset).distinct().order_by("name")
-        os_families = OSFamily.objects.filter(assetos__asset__in=current_queryset).distinct().order_by("name")
+        assets_for_table = list(current_queryset)
+        for asset in assets_for_table:
+            mac_addresses = [interface.mac_address for interface in asset.interfaces.all() if interface.mac_address]
+            asset.mac_preview = mac_addresses[:2]
+            asset.mac_extra_count = max(len(mac_addresses) - 2, 0)
+            os_labels = []
+            for os_entry in asset.os_entries.all():
+                label = os_entry.family.name
+                if os_entry.version:
+                    label = f"{label} {os_entry.version.version}"
+                os_labels.append(label)
+            asset.os_display = ", ".join(os_labels)
+
+        asset_ids = [asset.id for asset in assets_for_table]
+        owners = User.objects.filter(owned_assets__id__in=asset_ids).distinct().order_by("email")
+        groups = OrganizationalGroup.objects.filter(assets__id__in=asset_ids).distinct().order_by("name")
+        os_families = OSFamily.objects.filter(assetos__asset__id__in=asset_ids).distinct().order_by("name")
         params = self.request.GET.copy()
         params.pop("page", None)
+        params_without_per_page = params.copy()
+        params_without_per_page.pop("per_page", None)
+        context["assets"] = assets_for_table
+        context["total_filtered"] = context["paginator"].count if context.get("paginator") else len(assets_for_table)
         context["query"] = self.request.GET.get("q", "").strip()
+        context["per_page"] = self.get_paginate_by(self.object_list)
+        context["per_page_options"] = self.page_size_options
         context["status_filters"] = [value.strip() for value in self.request.GET.getlist("status") if value.strip()]
         context["owner_filters"] = [value.strip() for value in self.request.GET.getlist("owner") if value.strip()]
         context["group_filters"] = [value.strip() for value in self.request.GET.getlist("group") if value.strip()]
@@ -307,6 +372,7 @@ class AssetListView(LoginRequiredMixin, ListView):
         context["group_choices"] = groups
         context["os_family_choices"] = os_families
         context["page_query"] = params.urlencode()
+        context["page_query_without_per_page"] = params_without_per_page.urlencode()
         context["can_edit"] = user_can_edit_any_asset(self.request.user)
         context["can_access_admin"] = user_has_admin_access(self.request.user)
         context["can_create"] = user_can_edit_any_asset(self.request.user)
@@ -499,9 +565,11 @@ class AssetDetailView(LoginRequiredMixin, DetailView):
     def get_queryset(self):
         return (
             visible_assets_for_user(self.request.user)
-            .select_related("owner", "asset_os__family", "asset_os__version")
+            .select_related("owner")
             .prefetch_related(
                 "groups",
+                "os_entries__family",
+                "os_entries__version",
                 "interfaces__ip_addresses__network",
                 "ports__port_interfaces__ip_addresses__network",
             )
@@ -527,7 +595,7 @@ class AssetOverviewView(LoginRequiredMixin, TemplateView):
 
 def get_editable_asset_or_403(user, pk):
     asset = get_object_or_404(
-        visible_assets_for_user(user).select_related("owner", "asset_os__family", "asset_os__version"),
+        visible_assets_for_user(user).select_related("owner").prefetch_related("os_entries__family", "os_entries__version"),
         pk=pk,
     )
     if not can_edit_asset(user, asset):
@@ -561,25 +629,14 @@ class AssetEditView(LoginRequiredMixin, View):
     def post(self, request, pk):
         asset = get_editable_asset_or_403(request.user, pk)
         asset_form = AssetEditForm(request.POST, instance=asset, user=request.user, prefix="asset")
-        os_form = AssetOSFeaturesForm(request.POST, instance=getattr(asset, "asset_os", None), prefix="os")
-        if asset_form.is_valid() and os_form.is_valid():
-            asset = asset_form.save()
-            os_family = os_form.cleaned_data.get("family")
-            existing_os = getattr(asset, "asset_os", None)
-            if os_family is None:
-                if existing_os:
-                    existing_os.delete()
-            else:
-                os_record = os_form.save(commit=False)
-                os_record.asset = asset
-                os_record.save()
+        if asset_form.is_valid():
+            asset_form.save()
             messages.success(request, "Asset updated.")
             return redirect("inventory:asset-detail", pk=asset.pk)
-
-        context = self.get_context(asset, asset_form=asset_form, os_form=os_form)
+        context = self.get_context(asset, asset_form=asset_form)
         return render(request, self.template_name, context, status=400)
 
-    def get_context(self, asset, *, asset_form=None, os_form=None, port_form=None):
+    def get_context(self, asset, *, asset_form=None, os_form=None, port_form=None, os_row_forms=None):
         ports_tree, unassigned_interfaces = build_ports_tree(asset)
         for item in ports_tree:
             item["interface_form"] = PortInterfaceCreateForm(asset=asset, prefix=f"iface-{item['port'].id}")
@@ -595,14 +652,63 @@ class AssetEditView(LoginRequiredMixin, View):
                 }
                 for interface in item["interfaces"]
             ]
+        if os_row_forms is None:
+            os_rows = list(asset.os_entries.select_related("family", "version").order_by("-id"))
+            os_row_forms = [
+                {"record": row, "form": AssetOSFeaturesForm(instance=row, prefix=f"os-row-{row.id}")}
+                for row in os_rows
+            ]
         return {
             "asset": asset,
             "asset_form": asset_form or AssetEditForm(instance=asset, user=self.request.user, prefix="asset"),
-            "os_form": os_form or AssetOSFeaturesForm(instance=getattr(asset, "asset_os", None), prefix="os"),
+            "os_form": os_form or AssetOSFeaturesForm(prefix="os-new"),
+            "os_row_forms": os_row_forms,
             "port_form": port_form or PortCreateForm(prefix="port"),
             "ports_tree": ports_tree,
             "unassigned_interfaces": unassigned_interfaces,
         }
+
+
+class AssetOSCreateView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        asset = get_editable_asset_or_403(request.user, pk)
+        form = AssetOSFeaturesForm(request.POST, prefix="os-new")
+        if form.is_valid():
+            if form.cleaned_data.get("family") is None:
+                messages.error(request, "OS family is required.")
+            else:
+                os_record = form.save(commit=False)
+                os_record.asset = asset
+                os_record.full_clean()
+                os_record.save()
+                messages.success(request, "OS entry added.")
+        else:
+            for field, errors in form.errors.items():
+                messages.error(request, f"OS {field}: {' '.join(errors)}")
+        return redirect("inventory:asset-edit", pk=asset.pk)
+
+
+class AssetOSUpdateView(LoginRequiredMixin, View):
+    def post(self, request, pk, os_id):
+        asset = get_editable_asset_or_403(request.user, pk)
+        os_record = get_object_or_404(AssetOS.objects.filter(asset=asset), pk=os_id)
+        action = request.POST.get("action", "save")
+        if action == "delete":
+            os_record.delete()
+            messages.success(request, "OS entry removed.")
+            return redirect("inventory:asset-edit", pk=asset.pk)
+
+        form = AssetOSFeaturesForm(request.POST, instance=os_record, prefix=f"os-row-{os_record.id}")
+        if form.is_valid():
+            if form.cleaned_data.get("family") is None:
+                messages.error(request, "OS family is required.")
+            else:
+                form.save()
+                messages.success(request, "OS entry updated.")
+        else:
+            for field, errors in form.errors.items():
+                messages.error(request, f"OS {field}: {' '.join(errors)}")
+        return redirect("inventory:asset-edit", pk=asset.pk)
 
 
 class AssetPortCreateView(LoginRequiredMixin, View):

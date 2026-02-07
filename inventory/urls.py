@@ -9,6 +9,8 @@ from .views import (
     AssetEditView,
     AssetListView,
     AssetOverviewView,
+    AssetOSCreateView,
+    AssetOSUpdateView,
     AssetPortCreateView,
     AssetPortInterfaceCreateView,
     AssetPortInterfaceUpdateView,
@@ -29,6 +31,8 @@ urlpatterns = [
     path("asset/import/template/", AssetImportTemplateView.as_view(), name="asset-import-template"),
     path("asset/<int:pk>/", AssetDetailView.as_view(), name="asset-detail"),
     path("asset/<int:pk>/edit/", AssetEditView.as_view(), name="asset-edit"),
+    path("asset/<int:pk>/os/add/", AssetOSCreateView.as_view(), name="asset-os-add"),
+    path("asset/<int:pk>/os/<int:os_id>/update/", AssetOSUpdateView.as_view(), name="asset-os-update"),
     path("asset/<int:pk>/port/add/", AssetPortCreateView.as_view(), name="asset-port-add"),
     path("asset/<int:pk>/port/<int:port_id>/update/", AssetPortUpdateView.as_view(), name="asset-port-update"),
     path(

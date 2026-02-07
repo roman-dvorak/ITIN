@@ -20,6 +20,8 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.sites",
     "rest_framework",
+    "rest_framework.authtoken",
+    "drf_spectacular",
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
@@ -140,6 +142,14 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.IsAuthenticated",
     ],
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.TokenAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "IT Asset Tracker API",
+    "DESCRIPTION": "API documentation for IT Asset Tracker",
+    "VERSION": "1.0.0",
 }

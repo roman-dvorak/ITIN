@@ -4,7 +4,7 @@ from .models import Asset
 
 
 def visible_assets_for_user(user):
-    queryset = Asset.objects.filter(asset_type=Asset.AssetType.COMPUTER)
+    queryset = Asset.objects.all()
     if not user.is_authenticated:
         return queryset.none()
     if user.is_superuser:

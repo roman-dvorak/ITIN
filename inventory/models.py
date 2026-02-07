@@ -70,9 +70,16 @@ class AssetQuerySet(models.QuerySet):
 class Asset(TimeStampedModel):
     class AssetType(models.TextChoices):
         COMPUTER = "COMPUTER", "Computer"
+        NOTEBOOK = "NOTEBOOK", "Notebook"
+        SERVER = "SERVER", "Server"
         MONITOR = "MONITOR", "Monitor"
         KEYBOARD = "KEYBOARD", "Keyboard"
+        DEVICE = "DEVICE", "Device"
+        NETWORK = "NETWORK", "Network"
         PRINTER = "PRINTER", "Printer"
+        MOBILE = "MOBILE", "Mobile"
+        TABLET = "TABLET", "Tablet"
+        BYOD = "BYOD", "BYOD"
         OTHER = "OTHER", "Other"
 
     class Status(models.TextChoices):
@@ -81,7 +88,7 @@ class Asset(TimeStampedModel):
         RETIRED = "RETIRED", "Retired"
         LOST = "LOST", "Lost"
 
-    name = models.CharField(max_length=200, unique=True)
+    name = models.CharField(max_length=200, blank=True)
     asset_type = models.CharField(
         max_length=20,
         choices=AssetType.choices,
@@ -95,6 +102,8 @@ class Asset(TimeStampedModel):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="owned_assets",
+        null=True,
+        blank=True,
     )
     groups = models.ManyToManyField(OrganizationalGroup, related_name="assets", blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
@@ -108,6 +117,14 @@ class Asset(TimeStampedModel):
 
     def get_absolute_url(self):
         return reverse("inventory:asset-detail", args=[self.pk])
+
+    @property
+    def asset_os(self):
+        """Backward-compatible access to the most recently saved OS record."""
+        if hasattr(self, "_prefetched_objects_cache") and "os_entries" in self._prefetched_objects_cache:
+            entries = self._prefetched_objects_cache["os_entries"]
+            return entries[0] if entries else None
+        return self.os_entries.select_related("family", "version").order_by("-id").first()
 
 
 class OSFamily(models.Model):
@@ -155,7 +172,7 @@ class AssetOS(models.Model):
         EXTENDED = "EXTENDED", "Extended"
         EOL = "EOL", "End of life"
 
-    asset = models.OneToOneField(Asset, on_delete=models.CASCADE, related_name="asset_os")
+    asset = models.ForeignKey(Asset, on_delete=models.CASCADE, related_name="os_entries")
     family = models.ForeignKey(OSFamily, on_delete=models.PROTECT)
     version = models.ForeignKey(OSVersion, on_delete=models.PROTECT, null=True, blank=True)
     patch_level = models.CharField(max_length=120, blank=True)
@@ -166,6 +183,9 @@ class AssetOS(models.Model):
         default=SupportState.UNKNOWN,
     )
     auto_updates_enabled = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("-id",)
 
     def clean(self):
         if self.version and self.version.family_id != self.family_id:
@@ -349,6 +369,8 @@ class GuestDevice(TimeStampedModel):
 @receiver(post_save, sender=Asset)
 def ensure_default_asset_connectivity(sender, instance: Asset, created: bool, **_kwargs):
     if instance.asset_type != Asset.AssetType.COMPUTER or not created:
+        return
+    if getattr(instance, "_skip_default_connectivity", False):
         return
 
     with transaction.atomic():

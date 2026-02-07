@@ -59,7 +59,7 @@
         name="q"
         value="{{ query }}"
         placeholder="Search by name, tag, serial..."
-        class="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+        class="h-[38px] w-full rounded border border-slate-300 px-3 text-sm"
       >
       <select name="status" multiple class="select2 w-full rounded border border-slate-300 px-3 py-2 text-sm" data-placeholder="All statuses">
         {% for code, label in status_choices %}
@@ -98,21 +98,15 @@
     </div>
   </form>
 
+  <div class="mb-3">
+    {% include "inventory/partials/asset_pagination_controls.html" with control_id="top" %}
+  </div>
+
   <section>
     {% include "inventory/partials/asset_table.html" with assets=assets %}
   </section>
 
-  {% if is_paginated %}
-    <div class="mt-4 flex items-center justify-between text-sm text-slate-700">
-      <div>Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</div>
-      <div class="flex gap-2">
-        {% if page_obj.has_previous %}
-          <a class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
-        {% endif %}
-        {% if page_obj.has_next %}
-          <a class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
-        {% endif %}
-      </div>
-    </div>
-  {% endif %}
+  <div class="mt-4">
+    {% include "inventory/partials/asset_pagination_controls.html" with control_id="bottom" %}
+  </div>
 {% endblock %}

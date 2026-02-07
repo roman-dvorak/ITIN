@@ -1,8 +1,12 @@
+from django.contrib.auth import authenticate, login
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models import Q
+from drf_spectacular.utils import extend_schema
+from rest_framework.authtoken.models import Token
 from rest_framework import mixins, status, viewsets
 from rest_framework.exceptions import PermissionDenied, ValidationError
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -10,16 +14,23 @@ from .access import can_edit_asset, visible_assets_for_user
 from .models import Asset, Network, NetworkInterface, OrganizationalGroup, OSFamily, OSVersion, Port
 from .permissions import AssetObjectPermission
 from .serializers import (
+    ApiLoginSerializer,
+    AssetPortInterfaceCreateSerializer,
+    AssetCreateSerializer,
     AssetListSerializer,
     AssetUpdateSerializer,
     BulkAssetRowSerializer,
     BulkInterfaceRowSerializer,
+    GroupCreateSerializer,
     GroupLookupSerializer,
+    NetworkInterfaceCreateSerializer,
     NetworkInterfaceListSerializer,
     NetworkInterfaceUpdateSerializer,
     NetworkLookupSerializer,
+    OSFamilyCreateSerializer,
     OSFamilyLookupSerializer,
     OSVersionLookupSerializer,
+    PortCreateSerializer,
     PortLookupSerializer,
     PortUpdateSerializer,
     UserLookupSerializer,
@@ -28,7 +39,56 @@ from .serializers import (
 User = get_user_model()
 
 
-class AssetViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
+class ApiLoginView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = ApiLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        username = serializer.validated_data.get("username")
+        email = serializer.validated_data.get("email")
+        password = serializer.validated_data["password"]
+
+        auth_identifier = username or email
+        user = authenticate(request=request, username=auth_identifier, password=password)
+        if user is None and email:
+            candidate = User.objects.filter(email__iexact=email, is_active=True).first()
+            if candidate:
+                user = authenticate(
+                    request=request,
+                    username=getattr(candidate, User.USERNAME_FIELD),
+                    password=password,
+                )
+
+        if user is None:
+            raise ValidationError({"detail": "Invalid credentials."})
+        if not user.is_active:
+            raise ValidationError({"detail": "User account is inactive."})
+
+        login(request, user)
+        token = Token.objects.filter(user=user).first()
+        return Response(
+            {
+                "user": UserLookupSerializer(user).data,
+                "token": token.key if token else None,
+                "token_available": bool(token),
+                "detail": (
+                    "Login successful."
+                    if token
+                    else "Login successful. Token is not provisioned for this user; create it in Django admin."
+                ),
+            }
+        )
+
+
+class AssetViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
     permission_classes = [AssetObjectPermission]
 
     def get_queryset(self):
@@ -38,8 +98,8 @@ class AssetViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upda
             .select_related("owner")
             .prefetch_related(
                 "groups",
-                "asset_os__family",
-                "asset_os__version",
+                "os_entries__family",
+                "os_entries__version",
                 "ports__port_interfaces__ip_addresses__network",
                 "interfaces__ip_addresses__network",
             )
@@ -63,9 +123,14 @@ class AssetViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upda
         return queryset.distinct()
 
     def get_serializer_class(self):
+        if self.action == "create":
+            return AssetCreateSerializer
         if self.action in ("partial_update", "update"):
             return AssetUpdateSerializer
         return AssetListSerializer
+
+    def perform_create(self, serializer):
+        serializer.save()
 
     def perform_update(self, serializer):
         asset = self.get_object()
@@ -74,7 +139,12 @@ class AssetViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upda
         serializer.save()
 
 
-class NetworkInterfaceViewSet(mixins.ListModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
+class NetworkInterfaceViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
@@ -102,9 +172,14 @@ class NetworkInterfaceViewSet(mixins.ListModelMixin, mixins.UpdateModelMixin, vi
         return queryset
 
     def get_serializer_class(self):
+        if self.action == "create":
+            return NetworkInterfaceCreateSerializer
         if self.action in ("update", "partial_update"):
             return NetworkInterfaceUpdateSerializer
         return NetworkInterfaceListSerializer
+
+    def perform_create(self, serializer):
+        serializer.save()
 
     def perform_update(self, serializer):
         interface = self.get_object()
@@ -113,7 +188,12 @@ class NetworkInterfaceViewSet(mixins.ListModelMixin, mixins.UpdateModelMixin, vi
         serializer.save()
 
 
-class PortViewSet(mixins.ListModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
+class PortViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
@@ -130,9 +210,14 @@ class PortViewSet(mixins.ListModelMixin, mixins.UpdateModelMixin, viewsets.Gener
         return queryset.order_by("asset__name", "name", "id")
 
     def get_serializer_class(self):
+        if self.action == "create":
+            return PortCreateSerializer
         if self.action in ("update", "partial_update"):
             return PortUpdateSerializer
         return PortLookupSerializer
+
+    def perform_create(self, serializer):
+        serializer.save()
 
     def perform_update(self, serializer):
         port = self.get_object()
@@ -308,6 +393,59 @@ class BulkInterfaceUpdateAPIView(APIView):
         return Response({"results": results}, status=status.HTTP_207_MULTI_STATUS if has_errors else status.HTTP_200_OK)
 
 
+class AssetPortInterfaceCreateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request=AssetPortInterfaceCreateSerializer,
+        responses={201: dict},
+        description="Create port and interface in one request and link both to the given asset.",
+    )
+    def post(self, request, asset_id):
+        try:
+            asset = visible_assets_for_user(request.user).get(pk=asset_id)
+        except Asset.DoesNotExist:
+            raise ValidationError({"asset_id": "Asset not found or not visible."})
+
+        if not can_edit_asset(request.user, asset):
+            raise PermissionDenied("Missing edit permission for this asset.")
+
+        serializer = AssetPortInterfaceCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+
+        with transaction.atomic():
+            port = Port(
+                asset=asset,
+                name=validated["port_name"],
+                port_kind=validated["port_kind"],
+                notes=validated["port_notes"],
+                active=validated["port_active"],
+            )
+            port.full_clean()
+            port.save()
+
+            interface = NetworkInterface(
+                asset=asset,
+                port=port,
+                identifier=validated["interface_identifier"],
+                mac_address=validated["interface_mac_address"] or None,
+                notes=validated["interface_notes"],
+                active=validated["interface_active"],
+            )
+            interface.full_clean()
+            interface.save()
+
+        return Response(
+            {
+                "asset_id": asset.id,
+                "port": PortLookupSerializer(port).data,
+                "interface": NetworkInterfaceListSerializer(interface).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
 class UserLookupAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -338,6 +476,14 @@ class GroupLookupAPIView(APIView):
         serializer = GroupLookupSerializer(queryset.order_by("name")[:50], many=True)
         return Response(serializer.data)
 
+    def post(self, request):
+        if not request.user.is_superuser:
+            raise PermissionDenied("Only superusers can create groups via API.")
+        serializer = GroupCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        group = serializer.save()
+        return Response(GroupLookupSerializer(group).data, status=status.HTTP_201_CREATED)
+
 
 class OSFamilyLookupAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -349,6 +495,14 @@ class OSFamilyLookupAPIView(APIView):
             queryset = queryset.filter(name__icontains=q)
         serializer = OSFamilyLookupSerializer(queryset[:50], many=True)
         return Response(serializer.data)
+
+    def post(self, request):
+        if not request.user.is_superuser:
+            raise PermissionDenied("Only superusers can create OS families via API.")
+        serializer = OSFamilyCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        family = serializer.save()
+        return Response(OSFamilyLookupSerializer(family).data, status=status.HTTP_201_CREATED)
 
 
 class OSVersionLookupAPIView(APIView):
