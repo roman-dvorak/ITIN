@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}{{ profile_user.email }} | User Detail{% endblock %}
+
+{% block content %}
+  <div class="mb-6 flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-semibold">{{ profile_user.email }}</h1>
+      <p class="text-sm text-slate-600">User detail</p>
+    </div>
+    <div class="flex items-center gap-2">
+      {% if can_access_admin %}
+        <a href="{% url 'admin:auth_user_change' profile_user.id %}" class="rounded border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100">Admin user</a>
+      {% endif %}
+      <a href="{% url 'inventory:user-list' %}" class="rounded border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100">Back to users</a>
+    </div>
+  </div>
+
+  <section class="mb-6 rounded-lg border border-slate-200 bg-white p-4">
+    <h2 class="mb-3 text-lg font-medium">Profile</h2>
+    <dl class="grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
+      <div><dt class="font-semibold text-slate-700">Email</dt><dd>{{ profile_user.email }}</dd></div>
+      <div><dt class="font-semibold text-slate-700">First name</dt><dd>{{ profile_user.first_name|default:"-" }}</dd></div>
+      <div><dt class="font-semibold text-slate-700">Last name</dt><dd>{{ profile_user.last_name|default:"-" }}</dd></div>
+      <div><dt class="font-semibold text-slate-700">Staff</dt><dd>{% if profile_user.is_staff %}Yes{% else %}No{% endif %}</dd></div>
+      <div><dt class="font-semibold text-slate-700">Superuser</dt><dd>{% if profile_user.is_superuser %}Yes{% else %}No{% endif %}</dd></div>
+    </dl>
+  </section>
+
+  <section class="mb-6 rounded-lg border border-slate-200 bg-white p-4">
+    <h2 class="mb-3 text-lg font-medium">Groups</h2>
+    <div class="space-y-2 text-sm">
+      <div>
+        <p class="mb-1 font-semibold text-slate-700">Admin groups</p>
+        <div class="flex flex-wrap gap-1">
+          {% for group in profile_user.asset_admin_groups.all %}
+            <span class="rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">{{ group.name }}</span>
+          {% empty %}
+            <span class="text-slate-400">None</span>
+          {% endfor %}
+        </div>
+      </div>
+      <div>
+        <p class="mb-1 font-semibold text-slate-700">Member groups</p>
+        <div class="flex flex-wrap gap-1">
+          {% for group in profile_user.asset_member_groups.all %}
+            <span class="rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">{{ group.name }}</span>
+          {% empty %}
+            <span class="text-slate-400">None</span>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="rounded-lg border border-slate-200 bg-white p-4">
+    <h2 class="mb-3 text-lg font-medium">Owned Assets</h2>
+    {% include "inventory/partials/asset_table.html" with assets=owned_assets %}
+  </section>
+{% endblock %}

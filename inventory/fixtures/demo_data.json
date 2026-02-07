@@ -1,0 +1,379 @@
+[
+  {
+    "model": "auth.user",
+    "pk": 100,
+    "fields": {
+      "password": "pbkdf2_sha256$1200000$opReyLDcbzXAjWtAFDQxLj$sLYuMP8oXTArTKgrAaJxhtBnXvGjCJjzv0bXQmXzDcM=",
+      "last_login": null,
+      "is_superuser": true,
+      "username": "itadmin@example.local",
+      "first_name": "IT",
+      "last_name": "Admin",
+      "email": "itadmin@example.local",
+      "is_staff": true,
+      "is_active": true,
+      "date_joined": "2026-02-01T08:00:00Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "auth.user",
+    "pk": 101,
+    "fields": {
+      "password": "pbkdf2_sha256$1200000$YvEWO7QJOvWoq1xMA1n7Hd$p3NsIUGfK8OVltAEe18PcCZjuWMHURMMbGXECjTxL/0=",
+      "last_login": null,
+      "is_superuser": false,
+      "username": "jnovak@example.local",
+      "first_name": "Jan",
+      "last_name": "Novak",
+      "email": "jnovak@example.local",
+      "is_staff": false,
+      "is_active": true,
+      "date_joined": "2026-02-01T08:05:00Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "auth.user",
+    "pk": 102,
+    "fields": {
+      "password": "pbkdf2_sha256$1200000$YvEWO7QJOvWoq1xMA1n7Hd$p3NsIUGfK8OVltAEe18PcCZjuWMHURMMbGXECjTxL/0=",
+      "last_login": null,
+      "is_superuser": false,
+      "username": "pkolar@example.local",
+      "first_name": "Petr",
+      "last_name": "Kolar",
+      "email": "pkolar@example.local",
+      "is_staff": false,
+      "is_active": true,
+      "date_joined": "2026-02-01T08:10:00Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "inventory.organizationalgroup",
+    "pk": 1,
+    "fields": {
+      "name": "Core IT",
+      "description": "Central IT operations",
+      "default_vlan_id": 10,
+      "members": [101, 102],
+      "admins": [100]
+    }
+  },
+  {
+    "model": "inventory.organizationalgroup",
+    "pk": 2,
+    "fields": {
+      "name": "Helpdesk",
+      "description": "Support team",
+      "default_vlan_id": 20,
+      "members": [101],
+      "admins": [100, 102]
+    }
+  },
+  {
+    "model": "inventory.osfamily",
+    "pk": 1,
+    "fields": {
+      "name": "Windows 11 Enterprise",
+      "vendor": "Microsoft",
+      "platform_type": "DESKTOP",
+      "supports_domain_join": true
+    }
+  },
+  {
+    "model": "inventory.osfamily",
+    "pk": 2,
+    "fields": {
+      "name": "Ubuntu",
+      "vendor": "Canonical",
+      "platform_type": "SERVER",
+      "supports_domain_join": false
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 1,
+    "fields": {
+      "family": 1,
+      "version": "23H2",
+      "codename": "",
+      "release_date": "2023-10-01",
+      "end_of_support_date": "2026-11-10",
+      "is_lts": false,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 2,
+    "fields": {
+      "family": 2,
+      "version": "24.04",
+      "codename": "Noble Numbat",
+      "release_date": "2024-04-25",
+      "end_of_support_date": "2029-04-30",
+      "is_lts": true,
+      "kernel_version": "6.8"
+    }
+  },
+  {
+    "model": "inventory.network",
+    "pk": 1,
+    "fields": {
+      "name": "Office LAN",
+      "vlan_id": 10,
+      "cidr": "10.10.10.0/24",
+      "gateway": "10.10.10.1",
+      "dhcp_enabled": true,
+      "notes": ""
+    }
+  },
+  {
+    "model": "inventory.network",
+    "pk": 2,
+    "fields": {
+      "name": "Lab LAN",
+      "vlan_id": 20,
+      "cidr": "10.20.20.0/24",
+      "gateway": "10.20.20.1",
+      "dhcp_enabled": true,
+      "notes": ""
+    }
+  },
+  {
+    "model": "inventory.asset",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-02-02T09:00:00Z",
+      "updated_at": "2026-02-02T09:00:00Z",
+      "name": "atlas-lt-01",
+      "asset_type": "COMPUTER",
+      "asset_tag": "AT-001",
+      "serial_number": "SN-ATLAS-0001",
+      "manufacturer": "Lenovo",
+      "model": "ThinkPad T14",
+      "owner": 101,
+      "groups": [1],
+      "status": "ACTIVE",
+      "notes": "Primary office laptop"
+    }
+  },
+  {
+    "model": "inventory.asset",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-02-02T09:05:00Z",
+      "updated_at": "2026-02-02T09:05:00Z",
+      "name": "atlas-lt-02",
+      "asset_type": "COMPUTER",
+      "asset_tag": "AT-002",
+      "serial_number": "SN-ATLAS-0002",
+      "manufacturer": "Dell",
+      "model": "Latitude 5540",
+      "owner": 102,
+      "groups": [2],
+      "status": "STORED",
+      "notes": "Spare laptop"
+    }
+  },
+  {
+    "model": "inventory.asset",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-02-02T09:10:00Z",
+      "updated_at": "2026-02-02T09:10:00Z",
+      "name": "lab-mini-01",
+      "asset_type": "COMPUTER",
+      "asset_tag": "LAB-001",
+      "serial_number": "SN-LAB-0001",
+      "manufacturer": "Apple",
+      "model": "Mac mini",
+      "owner": 100,
+      "groups": [1, 2],
+      "status": "ACTIVE",
+      "notes": "Lab station"
+    }
+  },
+  {
+    "model": "inventory.assetos",
+    "pk": 1,
+    "fields": {
+      "asset": 1,
+      "family": 1,
+      "version": 1,
+      "patch_level": "2026-01 Cumulative",
+      "installed_on": "2025-03-10",
+      "support_state": "SUPPORTED",
+      "auto_updates_enabled": true
+    }
+  },
+  {
+    "model": "inventory.assetos",
+    "pk": 2,
+    "fields": {
+      "asset": 2,
+      "family": 1,
+      "version": 1,
+      "patch_level": "2025-12 Cumulative",
+      "installed_on": "2024-11-01",
+      "support_state": "SUPPORTED",
+      "auto_updates_enabled": true
+    }
+  },
+  {
+    "model": "inventory.assetos",
+    "pk": 3,
+    "fields": {
+      "asset": 3,
+      "family": 2,
+      "version": 2,
+      "patch_level": "apt-upgrade 2026-01-15",
+      "installed_on": "2025-05-01",
+      "support_state": "SUPPORTED",
+      "auto_updates_enabled": false
+    }
+  },
+  {
+    "model": "inventory.networkinterface",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-02-02T09:00:00Z",
+      "updated_at": "2026-02-02T09:00:00Z",
+      "asset": 1,
+      "port": 1,
+      "identifier": "lan",
+      "mac_address": "aa:bb:cc:dd:ee:01",
+      "active": true,
+      "notes": ""
+    }
+  },
+  {
+    "model": "inventory.networkinterface",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-02-02T09:05:00Z",
+      "updated_at": "2026-02-02T09:05:00Z",
+      "asset": 2,
+      "port": 2,
+      "identifier": "lan",
+      "mac_address": "aa:bb:cc:dd:ee:02",
+      "active": true,
+      "notes": ""
+    }
+  },
+  {
+    "model": "inventory.networkinterface",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-02-02T09:10:00Z",
+      "updated_at": "2026-02-02T09:10:00Z",
+      "asset": 3,
+      "port": 3,
+      "identifier": "lan",
+      "mac_address": "aa:bb:cc:dd:ee:03",
+      "active": true,
+      "notes": ""
+    }
+  },
+  {
+    "model": "inventory.port",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-02-02T09:00:00Z",
+      "updated_at": "2026-02-02T09:00:00Z",
+      "asset": 1,
+      "name": "LAN",
+      "port_kind": "RJ45",
+      "active": true,
+      "notes": ""
+    }
+  },
+  {
+    "model": "inventory.port",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-02-02T09:05:00Z",
+      "updated_at": "2026-02-02T09:05:00Z",
+      "asset": 2,
+      "name": "LAN",
+      "port_kind": "RJ45",
+      "active": true,
+      "notes": ""
+    }
+  },
+  {
+    "model": "inventory.port",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-02-02T09:10:00Z",
+      "updated_at": "2026-02-02T09:10:00Z",
+      "asset": 3,
+      "name": "LAN",
+      "port_kind": "RJ45",
+      "active": true,
+      "notes": ""
+    }
+  },
+  {
+    "model": "inventory.ipaddress",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-02-02T09:00:00Z",
+      "updated_at": "2026-02-02T09:00:00Z",
+      "network": 1,
+      "address": "10.10.10.11",
+      "status": "STATIC",
+      "assigned_interface": 1,
+      "hostname": "atlas-lt-01",
+      "active": true
+    }
+  },
+  {
+    "model": "inventory.ipaddress",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-02-02T09:05:00Z",
+      "updated_at": "2026-02-02T09:05:00Z",
+      "network": 1,
+      "address": "10.10.10.12",
+      "status": "DHCP_RESERVED",
+      "assigned_interface": 2,
+      "hostname": "atlas-lt-02",
+      "active": true
+    }
+  },
+  {
+    "model": "inventory.ipaddress",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-02-02T09:10:00Z",
+      "updated_at": "2026-02-02T09:10:00Z",
+      "network": 2,
+      "address": "10.20.20.30",
+      "status": "STATIC",
+      "assigned_interface": 3,
+      "hostname": "lab-mini-01",
+      "active": true
+    }
+  },
+  {
+    "model": "inventory.guestdevice",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-02-02T09:30:00Z",
+      "updated_at": "2026-02-02T09:30:00Z",
+      "description": "Guest notebook",
+      "sponsor": 100,
+      "groups": [1],
+      "mac_address": "11:22:33:44:55:66",
+      "valid_from": "2026-02-01T08:00:00Z",
+      "valid_until": "2027-02-01T08:00:00Z",
+      "enabled": true
+    }
+  }
+]

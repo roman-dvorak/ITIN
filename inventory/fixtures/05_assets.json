@@ -1,0 +1,218 @@
+[
+  {
+    "model": "inventory.asset",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-02-02T09:00:00Z",
+      "updated_at": "2026-02-02T09:00:00Z",
+      "name": "atlas-lt-01",
+      "asset_type": "COMPUTER",
+      "asset_tag": "AT-001",
+      "serial_number": "SN-ATLAS-0001",
+      "manufacturer": "Lenovo",
+      "model": "ThinkPad T14",
+      "owner": 101,
+      "groups": [1],
+      "status": "ACTIVE",
+      "notes": "Primary office laptop"
+    }
+  },
+  {
+    "model": "inventory.asset",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-02-02T09:05:00Z",
+      "updated_at": "2026-02-02T09:05:00Z",
+      "name": "atlas-lt-02",
+      "asset_type": "COMPUTER",
+      "asset_tag": "AT-002",
+      "serial_number": "SN-ATLAS-0002",
+      "manufacturer": "Dell",
+      "model": "Latitude 5540",
+      "owner": 102,
+      "groups": [2],
+      "status": "STORED",
+      "notes": "Spare laptop"
+    }
+  },
+  {
+    "model": "inventory.asset",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-02-02T09:10:00Z",
+      "updated_at": "2026-02-02T09:10:00Z",
+      "name": "lab-mini-01",
+      "asset_type": "COMPUTER",
+      "asset_tag": "LAB-001",
+      "serial_number": "SN-LAB-0001",
+      "manufacturer": "Apple",
+      "model": "Mac mini",
+      "owner": 100,
+      "groups": [1, 2],
+      "status": "ACTIVE",
+      "notes": "Lab station"
+    }
+  },
+  {
+    "model": "inventory.assetos",
+    "pk": 1,
+    "fields": {
+      "asset": 1,
+      "family": 5,
+      "version": 22,
+      "patch_level": "2026-01 Cumulative",
+      "installed_on": "2025-03-10",
+      "support_state": "SUPPORTED",
+      "auto_updates_enabled": true
+    }
+  },
+  {
+    "model": "inventory.assetos",
+    "pk": 2,
+    "fields": {
+      "asset": 2,
+      "family": 5,
+      "version": 22,
+      "patch_level": "2025-12 Cumulative",
+      "installed_on": "2024-11-01",
+      "support_state": "SUPPORTED",
+      "auto_updates_enabled": true
+    }
+  },
+  {
+    "model": "inventory.assetos",
+    "pk": 3,
+    "fields": {
+      "asset": 3,
+      "family": 20,
+      "version": 102,
+      "patch_level": "apt-upgrade 2026-01-15",
+      "installed_on": "2025-05-01",
+      "support_state": "SUPPORTED",
+      "auto_updates_enabled": false
+    }
+  },
+  {
+    "model": "inventory.networkinterface",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-02-02T09:00:00Z",
+      "updated_at": "2026-02-02T09:00:00Z",
+      "asset": 1,
+      "port": 1,
+      "identifier": "lan",
+      "mac_address": "aa:bb:cc:dd:ee:01",
+      "active": true,
+      "notes": ""
+    }
+  },
+  {
+    "model": "inventory.networkinterface",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-02-02T09:05:00Z",
+      "updated_at": "2026-02-02T09:05:00Z",
+      "asset": 2,
+      "port": 2,
+      "identifier": "lan",
+      "mac_address": "aa:bb:cc:dd:ee:02",
+      "active": true,
+      "notes": ""
+    }
+  },
+  {
+    "model": "inventory.networkinterface",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-02-02T09:10:00Z",
+      "updated_at": "2026-02-02T09:10:00Z",
+      "asset": 3,
+      "port": 3,
+      "identifier": "lan",
+      "mac_address": "aa:bb:cc:dd:ee:03",
+      "active": true,
+      "notes": ""
+    }
+  },
+  {
+    "model": "inventory.port",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-02-02T09:00:00Z",
+      "updated_at": "2026-02-02T09:00:00Z",
+      "asset": 1,
+      "name": "LAN",
+      "port_kind": "RJ45",
+      "active": true,
+      "notes": ""
+    }
+  },
+  {
+    "model": "inventory.port",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-02-02T09:05:00Z",
+      "updated_at": "2026-02-02T09:05:00Z",
+      "asset": 2,
+      "name": "LAN",
+      "port_kind": "RJ45",
+      "active": true,
+      "notes": ""
+    }
+  },
+  {
+    "model": "inventory.port",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-02-02T09:10:00Z",
+      "updated_at": "2026-02-02T09:10:00Z",
+      "asset": 3,
+      "name": "LAN",
+      "port_kind": "RJ45",
+      "active": true,
+      "notes": ""
+    }
+  },
+  {
+    "model": "inventory.ipaddress",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-02-02T09:00:00Z",
+      "updated_at": "2026-02-02T09:00:00Z",
+      "network": 1,
+      "address": "10.10.10.11",
+      "status": "STATIC",
+      "assigned_interface": 1,
+      "hostname": "atlas-lt-01",
+      "active": true
+    }
+  },
+  {
+    "model": "inventory.ipaddress",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-02-02T09:05:00Z",
+      "updated_at": "2026-02-02T09:05:00Z",
+      "network": 1,
+      "address": "10.10.10.12",
+      "status": "DHCP_RESERVED",
+      "assigned_interface": 2,
+      "hostname": "atlas-lt-02",
+      "active": true
+    }
+  },
+  {
+    "model": "inventory.ipaddress",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-02-02T09:10:00Z",
+      "updated_at": "2026-02-02T09:10:00Z",
+      "network": 2,
+      "address": "10.20.20.30",
+      "status": "STATIC",
+      "assigned_interface": 3,
+      "hostname": "lab-mini-01",
+      "active": true
+    }
+  }
+]

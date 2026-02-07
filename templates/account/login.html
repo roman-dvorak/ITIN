@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% load i18n %}
+{% load account socialaccount %}
+
+{% block title %}{% trans "Sign In" %} | IT Asset Tracker{% endblock %}
+
+{% block content %}
+  <div class="mx-auto max-w-md">
+    <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <h1 class="mb-1 text-2xl font-semibold">{% trans "Sign In" %}</h1>
+      <p class="mb-4 text-sm text-slate-600">Use local account or OpenID (Microsoft Entra ID).</p>
+
+      <form method="post" action="{% url 'account_login' %}" class="space-y-3">
+        {% csrf_token %}
+        {% for field in form %}
+          <div>
+            <label class="mb-1 block text-sm font-medium text-slate-700" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}
+              <p class="mt-1 text-xs text-red-600">{{ error }}</p>
+            {% endfor %}
+          </div>
+        {% endfor %}
+        {% if redirect_field_value %}
+          <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}">
+        {% endif %}
+        <button type="submit" class="w-full rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">
+          {% trans "Sign In" %}
+        </button>
+      </form>
+
+      {% get_providers as socialaccount_providers %}
+      {% if socialaccount_providers %}
+        <div class="my-4 border-t border-slate-200"></div>
+        <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Single Sign-On</p>
+        <div class="space-y-2">
+          {% for provider in socialaccount_providers %}
+            <a href="{% provider_login_url provider.id process='login' %}" class="block rounded border border-slate-300 px-3 py-2 text-center text-sm hover:bg-slate-100">
+              Continue with {{ provider.name }}
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="text-sm text-slate-600">OpenID provider is not configured.</p>
+      {% endif %}
+    </section>
+  </div>
+{% endblock %}

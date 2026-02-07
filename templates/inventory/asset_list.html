@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Assets | IT Asset Tracker{% endblock %}
+
+{% block content %}
+  <div class="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div>
+      <h1 class="text-2xl font-semibold">Assets</h1>
+      <p class="text-sm text-slate-600">Inventory list with filters and detail links.</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <a href="{% url 'inventory:asset-overview' %}" class="rounded border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100">
+        Overview
+      </a>
+      {% if can_create %}
+        <a href="{% url 'inventory:asset-create' %}" class="rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">
+          New asset
+        </a>
+        <details class="relative">
+          <summary class="list-none cursor-pointer rounded border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100">
+            Data tools
+          </summary>
+          <div class="absolute right-0 z-30 mt-2 w-96 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+            <div class="space-y-2">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Export</p>
+              <div class="flex items-center gap-2">
+                <a href="{% url 'inventory:asset-export' %}?{% if page_query %}{{ page_query }}&{% endif %}format=csv" class="rounded border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100">
+                  CSV
+                </a>
+                <a href="{% url 'inventory:asset-export' %}?{% if page_query %}{{ page_query }}&{% endif %}format=xlsx" class="rounded border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100">
+                  XLSX
+                </a>
+                <a href="{% url 'inventory:asset-import-template' %}" class="rounded border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100">
+                  Import template
+                </a>
+              </div>
+            </div>
+            <form method="post" action="{% url 'inventory:asset-import' %}" enctype="multipart/form-data" class="mt-4 border-t border-slate-200 pt-3">
+              {% csrf_token %}
+              <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Import</p>
+              <div class="flex flex-col gap-2">
+                <input id="id_file" name="file" type="file" accept=".csv,.xlsx" class="w-full rounded border border-slate-300 px-3 py-2 text-sm">
+                <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">
+                  Import CSV/XLSX
+                </button>
+              </div>
+              <p class="mt-2 text-xs text-slate-500">Columns: name, asset_type, status, owner, groups, asset_tag, serial_number, manufacturer, model, notes, metadata.</p>
+            </form>
+          </div>
+        </details>
+      {% endif %}
+    </div>
+  </div>
+
+  <form method="get" class="mb-4 rounded-lg border border-slate-200 bg-white p-3">
+    <div class="grid grid-cols-1 gap-3 md:grid-cols-6">
+      <input
+        type="text"
+        name="q"
+        value="{{ query }}"
+        placeholder="Search by name, tag, serial..."
+        class="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+      >
+      <select name="status" multiple class="select2 w-full rounded border border-slate-300 px-3 py-2 text-sm" data-placeholder="All statuses">
+        {% for code, label in status_choices %}
+          <option value="{{ code }}" {% if code in status_filters %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <select name="owner" multiple class="select2 w-full rounded border border-slate-300 px-3 py-2 text-sm" data-placeholder="All owners">
+        {% for owner_item in owner_choices %}
+          <option value="{{ owner_item.id }}" {% if owner_item.id|stringformat:"s" in owner_filters %}selected{% endif %}>
+            {{ owner_item.email }}
+          </option>
+        {% endfor %}
+      </select>
+      <select name="group" multiple class="select2 w-full rounded border border-slate-300 px-3 py-2 text-sm" data-placeholder="All groups">
+        {% for group_item in group_choices %}
+          <option value="{{ group_item.id }}" {% if group_item.id|stringformat:"s" in group_filters %}selected{% endif %}>
+            {{ group_item.name }}
+          </option>
+        {% endfor %}
+      </select>
+      <select name="os_family" multiple class="select2 w-full rounded border border-slate-300 px-3 py-2 text-sm" data-placeholder="All OS families">
+        {% for family in os_family_choices %}
+          <option value="{{ family.id }}" {% if family.id|stringformat:"s" in os_family_filters %}selected{% endif %}>
+            {{ family.name }}
+          </option>
+        {% endfor %}
+      </select>
+      <div class="flex items-start gap-2">
+        <button type="submit" class="inline-flex h-[38px] items-center rounded bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-700">
+          Filter
+        </button>
+        <a href="{% url 'inventory:asset-list' %}" class="inline-flex h-[38px] items-center rounded border border-slate-300 px-4 text-sm hover:bg-slate-100">
+          Reset
+        </a>
+      </div>
+    </div>
+  </form>
+
+  <section>
+    {% include "inventory/partials/asset_table.html" with assets=assets %}
+  </section>
+
+  {% if is_paginated %}
+    <div class="mt-4 flex items-center justify-between text-sm text-slate-700">
+      <div>Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</div>
+      <div class="flex gap-2">
+        {% if page_obj.has_previous %}
+          <a class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+        {% endif %}
+        {% if page_obj.has_next %}
+          <a class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}

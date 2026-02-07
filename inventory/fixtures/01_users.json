@@ -1,0 +1,74 @@
+[
+  {
+    "model": "auth.user",
+    "pk": 1,
+    "fields": {
+      "password": "pbkdf2_sha256$720000$DaE+lCOyWH5LB6ki$AQSzByyEi+FGz7ElsUjoUCQaf60DGVRmbX9DY/8FyKc",
+      "last_login": null,
+      "is_superuser": true,
+      "username": "root@example.local",
+      "first_name": "Root",
+      "last_name": "User",
+      "email": "root@example.local",
+      "is_staff": true,
+      "is_active": true,
+      "date_joined": "2026-01-01T00:00:00Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "auth.user",
+    "pk": 100,
+    "fields": {
+      "password": "pbkdf2_sha256$720000$NwK1Q4eOitgK7bgv$wxp5BEhktR2N1gCueeoBq7qQwruIH+KQW1iQwwmgAcE",
+      "last_login": null,
+      "is_superuser": true,
+      "username": "itadmin@example.local",
+      "first_name": "IT",
+      "last_name": "Admin",
+      "email": "itadmin@example.local",
+      "is_staff": true,
+      "is_active": true,
+      "date_joined": "2026-02-01T08:00:00Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "auth.user",
+    "pk": 101,
+    "fields": {
+      "password": "pbkdf2_sha256$1200000$YvEWO7QJOvWoq1xMA1n7Hd$p3NsIUGfK8OVltAEe18PcCZjuWMHURMMbGXECjTxL/0=",
+      "last_login": null,
+      "is_superuser": false,
+      "username": "jnovak@example.local",
+      "first_name": "Jan",
+      "last_name": "Novak",
+      "email": "jnovak@example.local",
+      "is_staff": false,
+      "is_active": true,
+      "date_joined": "2026-02-01T08:05:00Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "auth.user",
+    "pk": 102,
+    "fields": {
+      "password": "pbkdf2_sha256$1200000$YvEWO7QJOvWoq1xMA1n7Hd$p3NsIUGfK8OVltAEe18PcCZjuWMHURMMbGXECjTxL/0=",
+      "last_login": null,
+      "is_superuser": false,
+      "username": "pkolar@example.local",
+      "first_name": "Petr",
+      "last_name": "Kolar",
+      "email": "pkolar@example.local",
+      "is_staff": false,
+      "is_active": true,
+      "date_joined": "2026-02-01T08:10:00Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  }
+]

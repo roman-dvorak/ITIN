@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}New Asset | IT Asset Tracker{% endblock %}
+
+{% block content %}
+  <div class="mb-6 flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-semibold">Create Asset</h1>
+      <p class="text-sm text-slate-600">Create a new inventory record.</p>
+    </div>
+    <a href="{% url 'inventory:asset-list' %}" class="rounded border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100">Back to assets</a>
+  </div>
+
+  <form method="post" class="space-y-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    {% csrf_token %}
+
+    <section class="space-y-4">
+      <h2 class="text-base font-semibold">Asset</h2>
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {% for field in form %}
+          <div class="{% if field.name == 'notes' or field.name == 'metadata' or field.name == 'groups' %}md:col-span-2{% endif %}">
+            <label class="mb-1 block text-sm font-medium text-slate-700" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}
+              <p class="mt-1 text-xs text-slate-500">{{ field.help_text }}</p>
+            {% endif %}
+            {% for error in field.errors %}
+              <p class="mt-1 text-xs text-red-600">{{ error }}</p>
+            {% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <div class="flex items-center justify-end gap-2 border-t border-slate-200 pt-4">
+      <a href="{% url 'inventory:asset-list' %}" class="rounded border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">Cancel</a>
+      <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">Create asset</button>
+    </div>
+  </form>
+{% endblock %}

@@ -1,0 +1,94 @@
+<div class="rounded-lg border border-slate-200 bg-white">
+  <div>
+    <table class="min-w-full divide-y divide-slate-200 text-sm">
+    <thead class="bg-slate-50">
+      <tr>
+        <th class="px-4 py-2 text-left font-medium text-slate-600">Name</th>
+        <th class="px-4 py-2 text-left font-medium text-slate-600">Type</th>
+        <th class="px-4 py-2 text-left font-medium text-slate-600">Owner</th>
+        <th class="px-4 py-2 text-left font-medium text-slate-600">Status</th>
+        <th class="px-4 py-2 text-left font-medium text-slate-600">OS</th>
+        <th class="px-4 py-2 text-left font-medium text-slate-600">Interfaces</th>
+        <th class="px-4 py-2 text-left font-medium text-slate-600">Groups</th>
+        <th class="px-4 py-2 text-left font-medium text-slate-600">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-200">
+      {% for asset in assets %}
+        <tr>
+          <td class="px-4 py-2">
+            <a href="{% url 'inventory:asset-detail' asset.id %}" class="font-medium text-slate-900 hover:text-blue-700">
+              {{ asset.name }}
+            </a>
+          </td>
+          <td class="px-4 py-2">{{ asset.get_asset_type_display }}</td>
+          <td class="px-4 py-2">
+            <a href="{% url 'inventory:user-detail' asset.owner.id %}" class="hover:text-blue-700">
+              {% if asset.owner.first_name or asset.owner.last_name %}
+                {{ asset.owner.first_name }} {{ asset.owner.last_name }}
+              {% else %}
+                {{ asset.owner.email }}
+              {% endif %}
+            </a>
+          </td>
+          <td class="px-4 py-2">{{ asset.get_status_display }}</td>
+          <td class="px-4 py-2">
+            {% if asset.asset_os %}
+              {{ asset.asset_os.family.name }}{% if asset.asset_os.version %} {{ asset.asset_os.version.version }}{% endif %}
+            {% else %}
+              <span class="text-slate-400">Not set</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-2">
+            <div class="group relative inline-block">
+              <span class="cursor-default rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
+                {{ asset.interfaces.all|length }} iface
+              </span>
+              <div class="invisible absolute left-0 bottom-full z-20 mb-2 w-80 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700 shadow-lg group-hover:visible group-focus-within:visible before:absolute before:left-0 before:top-full before:h-3 before:w-full before:content-['']">
+                <p class="mb-2 font-semibold text-slate-900">Interfaces</p>
+                <div class="max-h-52 space-y-2 overflow-y-auto">
+                  {% for interface in asset.interfaces.all %}
+                    <div class="rounded border border-slate-200 p-2">
+                      <div class="font-medium text-slate-900">{{ interface.identifier }}</div>
+                      <div>MAC: {{ interface.mac_address|default:"-" }}</div>
+                      <div>
+                        IPs:
+                        {% for ip in interface.ip_addresses.all %}
+                          <span>{{ ip.address }} ({{ ip.network.name }}){% if not forloop.last %}, {% endif %}</span>
+                        {% empty %}
+                          -
+                        {% endfor %}
+                      </div>
+                    </div>
+                  {% empty %}
+                    <p class="text-slate-500">No active interfaces.</p>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="px-4 py-2">
+            {% for group in asset.groups.all %}
+              <span class="rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">{{ group.name }}</span>
+            {% empty %}
+              <span class="text-slate-400">No groups</span>
+            {% endfor %}
+          </td>
+          <td class="px-4 py-2">
+            <div class="flex items-center gap-2">
+              <a href="{% url 'inventory:asset-detail' asset.id %}" class="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">Detail</a>
+              {% if can_access_admin %}
+                <a href="{% url 'admin:inventory_asset_change' asset.id %}" class="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">Admin</a>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td class="px-4 py-3 text-slate-500" colspan="8">No assets available.</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+    </table>
+  </div>
+</div>

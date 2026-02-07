@@ -1,0 +1,26 @@
+[
+  {
+    "model": "inventory.network",
+    "pk": 1,
+    "fields": {
+      "name": "Office LAN",
+      "vlan_id": 10,
+      "cidr": "10.10.10.0/24",
+      "gateway": "10.10.10.1",
+      "dhcp_enabled": true,
+      "notes": ""
+    }
+  },
+  {
+    "model": "inventory.network",
+    "pk": 2,
+    "fields": {
+      "name": "Lab LAN",
+      "vlan_id": 20,
+      "cidr": "10.20.20.0/24",
+      "gateway": "10.20.20.1",
+      "dhcp_enabled": true,
+      "notes": ""
+    }
+  }
+]

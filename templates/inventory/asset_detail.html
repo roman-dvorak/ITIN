@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}{{ asset.name }} | Asset Detail{% endblock %}
+
+{% block content %}
+  <div class="mb-6 flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-semibold">{{ asset.name }}</h1>
+      <p class="text-sm text-slate-600">Asset detail</p>
+    </div>
+    <div class="flex items-center gap-2">
+      {% if can_edit %}
+        <a href="{% url 'inventory:asset-edit' asset.id %}" class="rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700">Edit asset</a>
+      {% endif %}
+      {% if can_access_admin %}
+        <a href="{% url 'admin:inventory_asset_change' asset.id %}" class="rounded border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100">Admin asset</a>
+      {% endif %}
+      <a href="{% url 'inventory:asset-list' %}" class="rounded border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100">Back to list</a>
+    </div>
+  </div>
+
+  <section class="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+    <article class="rounded-lg border border-slate-200 bg-white p-4">
+      <h2 class="mb-3 text-lg font-medium">General</h2>
+      <dl class="grid grid-cols-1 gap-2 text-sm">
+        <div><dt class="font-semibold text-slate-700">Type</dt><dd>{{ asset.get_asset_type_display }}</dd></div>
+        <div>
+          <dt class="font-semibold text-slate-700">Owner</dt>
+          <dd class="flex items-center gap-2">
+            <a href="{% url 'inventory:user-detail' asset.owner.id %}" class="hover:text-blue-700">{{ asset.owner.email }}</a>
+            {% if can_access_admin %}
+              <a href="{% url 'admin:auth_user_change' asset.owner.id %}" class="rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-100">Admin user</a>
+            {% endif %}
+          </dd>
+        </div>
+        <div><dt class="font-semibold text-slate-700">Status</dt><dd>{{ asset.get_status_display }}</dd></div>
+        <div><dt class="font-semibold text-slate-700">Asset Tag</dt><dd>{{ asset.asset_tag|default:"-" }}</dd></div>
+        <div><dt class="font-semibold text-slate-700">Serial</dt><dd>{{ asset.serial_number|default:"-" }}</dd></div>
+        <div><dt class="font-semibold text-slate-700">Manufacturer</dt><dd>{{ asset.manufacturer|default:"-" }}</dd></div>
+        <div><dt class="font-semibold text-slate-700">Model</dt><dd>{{ asset.model|default:"-" }}</dd></div>
+      </dl>
+    </article>
+
+    <article class="rounded-lg border border-slate-200 bg-white p-4">
+      <h2 class="mb-3 text-lg font-medium">OS & Groups</h2>
+      <dl class="grid grid-cols-1 gap-2 text-sm">
+        <div>
+          <dt class="font-semibold text-slate-700">Operating system</dt>
+          <dd>
+            {% if asset.asset_os %}
+              {{ asset.asset_os.family.name }}{% if asset.asset_os.version %} {{ asset.asset_os.version.version }}{% endif %}
+              {% if asset.asset_os.patch_level %}<div class="text-slate-600">Patch level: {{ asset.asset_os.patch_level }}</div>{% endif %}
+              {% if asset.asset_os.installed_on %}<div class="text-slate-600">Installed: {{ asset.asset_os.installed_on }}</div>{% endif %}
+              <div class="text-slate-600">
+                Support: {{ asset.asset_os.get_support_state_display }} | Auto updates: {% if asset.asset_os.auto_updates_enabled %}On{% else %}Off{% endif %}
+              </div>
+            {% else %}
+              -
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="font-semibold text-slate-700">Groups</dt>
+          <dd class="mt-1 flex flex-wrap gap-1">
+            {% for group in asset.groups.all %}
+              <span class="rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">{{ group.name }}</span>
+            {% empty %}
+              <span>-</span>
+            {% endfor %}
+          </dd>
+        </div>
+      </dl>
+    </article>
+  </section>
+
+  <section class="rounded-lg border border-slate-200 bg-white p-4">
+    <h2 class="mb-3 text-lg font-medium">Ports & Interfaces</h2>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-200 text-sm">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="px-3 py-2 text-left font-medium text-slate-600">Type</th>
+            <th class="px-3 py-2 text-left font-medium text-slate-600">Name / Identifier</th>
+            <th class="px-3 py-2 text-left font-medium text-slate-600">Details</th>
+            <th class="px-3 py-2 text-left font-medium text-slate-600">IPs</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-200">
+          {% for item in ports_tree %}
+            <tr>
+              <td class="px-3 py-2 font-semibold text-slate-800">Port</td>
+              <td class="px-3 py-2 font-semibold text-slate-900">{{ item.port.name }}</td>
+              <td class="px-3 py-2">{{ item.port.get_port_kind_display }}</td>
+              <td class="px-3 py-2 text-slate-500">-</td>
+            </tr>
+            {% for interface in item.interfaces %}
+              <tr class="bg-slate-50/50">
+                <td class="px-3 py-2 text-slate-600">Interface</td>
+                <td class="px-3 py-2 pl-8">{{ interface.identifier }}</td>
+                <td class="px-3 py-2">
+                  MAC: {{ interface.mac_address|default:"-" }}
+                </td>
+                <td class="px-3 py-2">
+                  {% for ip in interface.ip_addresses.all %}
+                    <div>{{ ip.address }} ({{ ip.network.name }}){% if not ip.active %} - inactive{% endif %}</div>
+                  {% empty %}
+                    -
+                  {% endfor %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr class="bg-slate-50/50">
+                <td class="px-3 py-2 text-slate-600">Interface</td>
+                <td class="px-3 py-2 pl-8 text-slate-500" colspan="3">No interfaces under this port.</td>
+              </tr>
+            {% endfor %}
+          {% empty %}
+            <tr><td class="px-3 py-2 text-slate-500" colspan="4">No ports.</td></tr>
+          {% endfor %}
+          {% for interface in unassigned_interfaces %}
+            <tr class="bg-amber-50">
+              <td class="px-3 py-2 text-amber-700">Interface</td>
+              <td class="px-3 py-2">Unassigned / {{ interface.identifier }}</td>
+              <td class="px-3 py-2">MAC: {{ interface.mac_address|default:"-" }}</td>
+              <td class="px-3 py-2">
+                {% for ip in interface.ip_addresses.all %}
+                  <div>{{ ip.address }} ({{ ip.network.name }}){% if not ip.active %} - inactive{% endif %}</div>
+                {% empty %}
+                  -
+                {% endfor %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

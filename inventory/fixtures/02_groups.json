@@ -1,0 +1,24 @@
+[
+  {
+    "model": "inventory.organizationalgroup",
+    "pk": 1,
+    "fields": {
+      "name": "Core IT",
+      "description": "Central IT operations",
+      "default_vlan_id": 10,
+      "members": [101, 102],
+      "admins": [100]
+    }
+  },
+  {
+    "model": "inventory.organizationalgroup",
+    "pk": 2,
+    "fields": {
+      "name": "Helpdesk",
+      "description": "Support team",
+      "default_vlan_id": 20,
+      "members": [101],
+      "admins": [100, 102]
+    }
+  }
+]

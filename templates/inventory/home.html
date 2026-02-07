@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Home | IT Asset Tracker{% endblock %}
+
+{% block content %}
+  <div class="mb-6">
+    <h1 class="text-2xl font-semibold">Dashboard</h1>
+    <p class="text-sm text-slate-600">Přehled inventáře a síťových dat.</p>
+  </div>
+
+  <section class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <article class="rounded-lg border border-slate-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-wide text-slate-500">Total Assets</p>
+      <p class="mt-2 text-3xl font-semibold text-slate-900">{{ total_assets }}</p>
+    </article>
+    <article class="rounded-lg border border-slate-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-wide text-slate-500">Computers</p>
+      <p class="mt-2 text-3xl font-semibold text-slate-900">{{ total_computers }}</p>
+    </article>
+    <article class="rounded-lg border border-slate-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-wide text-slate-500">Assets With Active IP</p>
+      <p class="mt-2 text-3xl font-semibold text-slate-900">{{ assets_with_ip }}</p>
+    </article>
+    <article class="rounded-lg border border-slate-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-wide text-slate-500">Visible Groups</p>
+      <p class="mt-2 text-3xl font-semibold text-slate-900">{{ total_groups }}</p>
+    </article>
+    <article class="rounded-lg border border-slate-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-wide text-slate-500">Networks</p>
+      <p class="mt-2 text-3xl font-semibold text-slate-900">{{ total_networks }}</p>
+    </article>
+    <article class="rounded-lg border border-slate-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-wide text-slate-500">Active Guests</p>
+      <p class="mt-2 text-3xl font-semibold text-slate-900">{{ active_guests }}</p>
+    </article>
+  </section>
+
+  <section class="rounded-lg border border-slate-200 bg-white p-4">
+    <h2 class="mb-3 text-lg font-medium">Assets by status</h2>
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {% for card in status_cards %}
+        <div class="rounded border border-slate-200 p-3">
+          <p class="text-xs uppercase tracking-wide text-slate-500">{{ card.label }}</p>
+          <p class="mt-1 text-2xl font-semibold text-slate-900">{{ card.count }}</p>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+    <article class="rounded-lg border border-slate-200 bg-white p-4">
+      <h2 class="mb-3 text-lg font-medium">OS Family Distribution</h2>
+      <div class="mx-auto max-w-xs">
+        <canvas id="os-family-chart"></canvas>
+      </div>
+    </article>
+    <article class="rounded-lg border border-slate-200 bg-white p-4">
+      <h2 class="mb-3 text-lg font-medium">Computer Activity</h2>
+      <div class="mx-auto max-w-xs">
+        <canvas id="computer-activity-chart"></canvas>
+      </div>
+    </article>
+  </section>
+
+  {{ os_distribution|json_script:"os-distribution-data" }}
+  {{ computer_activity_distribution|json_script:"computer-activity-data" }}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    function buildPieChart(elementId, dataScriptId, palette) {
+      const canvas = document.getElementById(elementId);
+      const script = document.getElementById(dataScriptId);
+      if (!canvas || !script) {
+        return;
+      }
+      const parsed = JSON.parse(script.textContent || "[]");
+      const labels = parsed.map(function (item) { return item.label; });
+      const values = parsed.map(function (item) { return item.count; });
+      new Chart(canvas, {
+        type: "pie",
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              data: values,
+              backgroundColor: palette,
+              borderColor: "#ffffff",
+              borderWidth: 1,
+            },
+          ],
+        },
+        options: {
+          plugins: {
+            legend: { position: "bottom" },
+          },
+        },
+      });
+    }
+
+    buildPieChart(
+      "os-family-chart",
+      "os-distribution-data",
+      ["#0f172a", "#1d4ed8", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"]
+    );
+    buildPieChart(
+      "computer-activity-chart",
+      "computer-activity-data",
+      ["#16a34a", "#dc2626"]
+    );
+  </script>
+{% endblock %}

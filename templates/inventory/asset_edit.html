@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Edit {{ asset.name }} | IT Asset Tracker{% endblock %}
+
+{% block content %}
+  <div class="mb-6 flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-semibold">Edit asset: {{ asset.name }}</h1>
+      <p class="text-sm text-slate-600">Metadata, OS features a hierarchie port/interface.</p>
+    </div>
+    <a href="{% url 'inventory:asset-detail' asset.id %}" class="rounded border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100">Back to detail</a>
+  </div>
+
+  <form method="post" class="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+    {% csrf_token %}
+    <section class="rounded-lg border border-slate-200 bg-white p-4">
+      <h2 class="mb-3 text-lg font-medium">Asset</h2>
+      <div class="space-y-3">
+        {% for field in asset_form %}
+          <div>
+            <label for="{{ field.id_for_label }}" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}
+              <p class="mt-1 text-xs text-red-600">{{ field.errors|join:", " }}</p>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="rounded-lg border border-slate-200 bg-white p-4">
+      <h2 class="mb-3 text-lg font-medium">OS Features</h2>
+      <div class="space-y-3">
+        {% for field in os_form %}
+          <div>
+            <label for="{{ field.id_for_label }}" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}
+              <p class="mt-1 text-xs text-red-600">{{ field.errors|join:", " }}</p>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <div class="lg:col-span-2">
+      <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">Save asset</button>
+    </div>
+  </form>
+
+  <section class="mb-6 rounded-lg border border-slate-200 bg-white p-4">
+    <h2 class="mb-3 text-lg font-medium">Add Port</h2>
+    <form method="post" action="{% url 'inventory:asset-port-add' asset.id %}" class="grid grid-cols-1 gap-3 md:grid-cols-3">
+      {% csrf_token %}
+      {% for field in port_form %}
+        <div>
+          <label for="{{ field.id_for_label }}" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">{{ field.label }}</label>
+          {{ field }}
+        </div>
+      {% endfor %}
+      <div class="md:col-span-3">
+        <button type="submit" class="rounded border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">Create port</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="rounded-lg border border-slate-200 bg-white p-4">
+    <h2 class="mb-3 text-lg font-medium">Ports -> Interfaces</h2>
+    <div class="space-y-4">
+      {% for item in ports_tree %}
+        <article class="rounded border border-slate-200 p-3">
+          <form method="post" action="{% url 'inventory:asset-port-update' asset.id item.port.id %}" class="mb-3 rounded border border-slate-200 bg-slate-50 p-3">
+            {% csrf_token %}
+            <div class="grid grid-cols-1 gap-3 md:grid-cols-5">
+              <div>
+                <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Type</label>
+                <div class="rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Port</div>
+              </div>
+              <div>
+                <label for="{{ item.port_edit_form.name.id_for_label }}" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Name</label>
+                {{ item.port_edit_form.name }}
+              </div>
+              <div>
+                <label for="{{ item.port_edit_form.port_kind.id_for_label }}" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Kind</label>
+                {{ item.port_edit_form.port_kind }}
+              </div>
+              <div>
+                <label for="{{ item.port_edit_form.notes.id_for_label }}" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Notes</label>
+                {{ item.port_edit_form.notes }}
+              </div>
+            </div>
+            <div class="mt-3 flex items-center gap-2">
+              <button type="submit" name="action" value="save" class="rounded border border-slate-300 px-3 py-1 text-xs hover:bg-slate-100">Save Port</button>
+              <button type="submit" name="action" value="deactivate" class="rounded border border-amber-300 bg-amber-50 px-3 py-1 text-xs text-amber-800 hover:bg-amber-100">Deactivate Port</button>
+            </div>
+          </form>
+
+          <div class="space-y-2">
+            {% for row in item.interface_rows %}
+              <form method="post" action="{% url 'inventory:asset-port-interface-update' asset.id item.port.id row.interface.id %}" class="rounded border border-slate-200 p-3">
+                {% csrf_token %}
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-5">
+                  <div>
+                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Type</label>
+                    <div class="rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700">Interface</div>
+                  </div>
+                  <div>
+                    <label for="{{ row.form.identifier.id_for_label }}" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Identifier</label>
+                    {{ row.form.identifier }}
+                  </div>
+                  <div>
+                    <label for="{{ row.form.mac_address.id_for_label }}" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">MAC</label>
+                    {{ row.form.mac_address }}
+                  </div>
+                  <div>
+                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">IPs</label>
+                    <div class="rounded border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700">
+                      {% for ip in row.interface.ip_addresses.all %}
+                        <div>{{ ip.address }} ({{ ip.network.name }}){% if not ip.active %} - inactive{% endif %}</div>
+                      {% empty %}
+                        -
+                      {% endfor %}
+                    </div>
+                  </div>
+                  <div>
+                    <label for="{{ row.form.notes.id_for_label }}" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Notes</label>
+                    {{ row.form.notes }}
+                  </div>
+                </div>
+                <div class="mt-3 flex items-center gap-2">
+                  <button type="submit" name="action" value="save" class="rounded border border-slate-300 px-3 py-1 text-xs hover:bg-slate-100">Save Interface</button>
+                  <button type="submit" name="action" value="deactivate" class="rounded border border-amber-300 bg-amber-50 px-3 py-1 text-xs text-amber-800 hover:bg-amber-100">Deactivate Interface</button>
+                </div>
+              </form>
+            {% empty %}
+              <p class="text-sm text-slate-500">No interfaces under this port.</p>
+            {% endfor %}
+          </div>
+
+          <form method="post" action="{% url 'inventory:asset-port-interface-add' asset.id item.port.id %}" class="grid grid-cols-1 gap-3 md:grid-cols-3">
+            {% csrf_token %}
+            {% for field in item.interface_form %}
+              <div>
+                <label for="{{ field.id_for_label }}" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">{{ field.label }}</label>
+                {{ field }}
+              </div>
+            {% endfor %}
+            <div class="md:col-span-3">
+              <button type="submit" class="rounded border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">Add interface under {{ item.port.name }}</button>
+            </div>
+          </form>
+        </article>
+      {% empty %}
+        <p class="text-sm text-slate-500">No ports defined yet.</p>
+      {% endfor %}
+    </div>
+
+    {% if unassigned_interfaces %}
+      <div class="mt-4 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        <p class="font-semibold">Unassigned interfaces</p>
+        <ul class="mt-1 list-disc pl-5">
+          {% for interface in unassigned_interfaces %}
+            <li>{{ interface.identifier }} ({{ interface.mac_address|default:"no MAC" }})</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

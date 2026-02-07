@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}Users | IT Asset Tracker{% endblock %}
+
+{% block content %}
+  <div class="mb-6">
+    <h1 class="text-2xl font-semibold">Users</h1>
+    {% if only_profile %}
+      <p class="text-sm text-slate-600">Your profile.</p>
+    {% else %}
+      <p class="text-sm text-slate-600">User list scoped by your permissions.</p>
+    {% endif %}
+  </div>
+
+  {% if only_profile %}
+    <section class="max-w-xl rounded-lg border border-slate-200 bg-white p-4">
+      <div class="mb-3 flex items-center gap-2">
+        <a href="{% url 'inventory:user-detail' profile_user.id %}" class="rounded border border-slate-300 px-3 py-1 text-xs hover:bg-slate-100">Open detail</a>
+        {% if can_access_admin %}
+          <a href="{% url 'admin:auth_user_change' profile_user.id %}" class="rounded border border-slate-300 px-3 py-1 text-xs hover:bg-slate-100">Admin</a>
+        {% endif %}
+      </div>
+      <dl class="grid grid-cols-1 gap-2 text-sm">
+        <div><dt class="font-semibold text-slate-700">Email</dt><dd>{{ profile_user.email }}</dd></div>
+        <div><dt class="font-semibold text-slate-700">First name</dt><dd>{{ profile_user.first_name|default:"-" }}</dd></div>
+        <div><dt class="font-semibold text-slate-700">Last name</dt><dd>{{ profile_user.last_name|default:"-" }}</dd></div>
+        <div><dt class="font-semibold text-slate-700">Staff</dt><dd>{% if profile_user.is_staff %}Yes{% else %}No{% endif %}</dd></div>
+      </dl>
+    </section>
+  {% else %}
+    <form method="get" class="mb-4 flex w-full gap-2 md:w-auto">
+      <input
+        type="text"
+        name="q"
+        value="{{ query }}"
+        placeholder="Search email or name..."
+        class="w-full rounded border border-slate-300 px-3 py-2 text-sm md:w-96"
+      >
+      <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">
+        Search
+      </button>
+      <a href="{% url 'inventory:user-list' %}" class="rounded border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">
+        Reset
+      </a>
+    </form>
+
+    <div class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <table class="min-w-full divide-y divide-slate-200 text-sm">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="px-4 py-2 text-left font-medium text-slate-600">Email</th>
+            <th class="px-4 py-2 text-left font-medium text-slate-600">Name</th>
+            <th class="px-4 py-2 text-left font-medium text-slate-600">Staff</th>
+            <th class="px-4 py-2 text-left font-medium text-slate-600">Groups</th>
+            <th class="px-4 py-2 text-left font-medium text-slate-600">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-200">
+          {% for user_item in users %}
+            <tr>
+              <td class="px-4 py-2 font-medium text-slate-900">
+                <a href="{% url 'inventory:user-detail' user_item.id %}" class="hover:text-blue-700">{{ user_item.email }}</a>
+              </td>
+              <td class="px-4 py-2">{{ user_item.first_name }} {{ user_item.last_name }}</td>
+              <td class="px-4 py-2">{% if user_item.is_staff %}Yes{% else %}No{% endif %}</td>
+              <td class="px-4 py-2">
+                {% for group in user_item.asset_admin_groups.all %}
+                  <span class="mb-1 inline-block rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">admin: {{ group.name }}</span>
+                {% endfor %}
+                {% for group in user_item.asset_member_groups.all %}
+                  <span class="mb-1 inline-block rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">member: {{ group.name }}</span>
+                {% endfor %}
+                {% if not user_item.asset_admin_groups.exists and not user_item.asset_member_groups.exists %}
+                  <span class="text-slate-400">No groups</span>
+                {% endif %}
+              </td>
+              <td class="px-4 py-2">
+                <div class="flex items-center gap-2">
+                  <a href="{% url 'inventory:user-detail' user_item.id %}" class="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">Detail</a>
+                  {% if can_access_admin %}
+                    <a href="{% url 'admin:auth_user_change' user_item.id %}" class="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">Admin</a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td class="px-4 py-3 text-slate-500" colspan="5">No users available.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if is_paginated %}
+      <div class="mt-4 flex items-center justify-between text-sm text-slate-700">
+        <div>Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</div>
+        <div class="flex gap-2">
+          {% if page_obj.has_previous %}
+            <a class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+          {% endif %}
+          {% if page_obj.has_next %}
+            <a class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,17 @@
+[
+  {
+    "model": "inventory.guestdevice",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-02-02T09:30:00Z",
+      "updated_at": "2026-02-02T09:30:00Z",
+      "description": "Guest notebook",
+      "sponsor": 100,
+      "groups": [1],
+      "mac_address": "11:22:33:44:55:66",
+      "valid_from": "2026-02-01T08:00:00Z",
+      "valid_until": "2027-02-01T08:00:00Z",
+      "enabled": true
+    }
+  }
+]

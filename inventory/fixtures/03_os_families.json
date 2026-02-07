@@ -1,0 +1,683 @@
+[
+  {
+    "model": "inventory.osfamily",
+    "pk": 1,
+    "fields": {
+      "name": "Windows 7",
+      "vendor": "Microsoft",
+      "platform_type": "DESKTOP",
+      "supports_domain_join": true
+    }
+  },
+  {
+    "model": "inventory.osfamily",
+    "pk": 2,
+    "fields": {
+      "name": "Windows 8",
+      "vendor": "Microsoft",
+      "platform_type": "DESKTOP",
+      "supports_domain_join": true
+    }
+  },
+  {
+    "model": "inventory.osfamily",
+    "pk": 3,
+    "fields": {
+      "name": "Windows 8.1",
+      "vendor": "Microsoft",
+      "platform_type": "DESKTOP",
+      "supports_domain_join": true
+    }
+  },
+  {
+    "model": "inventory.osfamily",
+    "pk": 4,
+    "fields": {
+      "name": "Windows 10",
+      "vendor": "Microsoft",
+      "platform_type": "DESKTOP",
+      "supports_domain_join": true
+    }
+  },
+  {
+    "model": "inventory.osfamily",
+    "pk": 5,
+    "fields": {
+      "name": "Windows 11",
+      "vendor": "Microsoft",
+      "platform_type": "DESKTOP",
+      "supports_domain_join": true
+    }
+  },
+  {
+    "model": "inventory.osfamily",
+    "pk": 6,
+    "fields": {
+      "name": "Windows Server 2008 R2",
+      "vendor": "Microsoft",
+      "platform_type": "SERVER",
+      "supports_domain_join": true
+    }
+  },
+  {
+    "model": "inventory.osfamily",
+    "pk": 7,
+    "fields": {
+      "name": "Windows Server 2012 R2",
+      "vendor": "Microsoft",
+      "platform_type": "SERVER",
+      "supports_domain_join": true
+    }
+  },
+  {
+    "model": "inventory.osfamily",
+    "pk": 8,
+    "fields": {
+      "name": "Windows Server 2016",
+      "vendor": "Microsoft",
+      "platform_type": "SERVER",
+      "supports_domain_join": true
+    }
+  },
+  {
+    "model": "inventory.osfamily",
+    "pk": 9,
+    "fields": {
+      "name": "Windows Server 2019",
+      "vendor": "Microsoft",
+      "platform_type": "SERVER",
+      "supports_domain_join": true
+    }
+  },
+  {
+    "model": "inventory.osfamily",
+    "pk": 10,
+    "fields": {
+      "name": "Windows Server 2022",
+      "vendor": "Microsoft",
+      "platform_type": "SERVER",
+      "supports_domain_join": true
+    }
+  },
+  {
+    "model": "inventory.osfamily",
+    "pk": 11,
+    "fields": {
+      "name": "Windows Server 2025",
+      "vendor": "Microsoft",
+      "platform_type": "SERVER",
+      "supports_domain_join": true
+    }
+  },
+  {
+    "model": "inventory.osfamily",
+    "pk": 20,
+    "fields": {
+      "name": "Ubuntu",
+      "vendor": "Canonical",
+      "platform_type": "SERVER",
+      "supports_domain_join": false
+    }
+  },
+  {
+    "model": "inventory.osfamily",
+    "pk": 21,
+    "fields": {
+      "name": "Debian",
+      "vendor": "Debian Project",
+      "platform_type": "SERVER",
+      "supports_domain_join": false
+    }
+  },
+  {
+    "model": "inventory.osfamily",
+    "pk": 22,
+    "fields": {
+      "name": "CentOS Stream",
+      "vendor": "Red Hat",
+      "platform_type": "SERVER",
+      "supports_domain_join": false
+    }
+  },
+  {
+    "model": "inventory.osfamily",
+    "pk": 23,
+    "fields": {
+      "name": "Rocky Linux",
+      "vendor": "Rocky Enterprise Software Foundation",
+      "platform_type": "SERVER",
+      "supports_domain_join": false
+    }
+  },
+  {
+    "model": "inventory.osfamily",
+    "pk": 24,
+    "fields": {
+      "name": "AlmaLinux",
+      "vendor": "AlmaLinux OS Foundation",
+      "platform_type": "SERVER",
+      "supports_domain_join": false
+    }
+  },
+  {
+    "model": "inventory.osfamily",
+    "pk": 30,
+    "fields": {
+      "name": "macOS",
+      "vendor": "Apple",
+      "platform_type": "DESKTOP",
+      "supports_domain_join": true
+    }
+  },
+  {
+    "model": "inventory.osfamily",
+    "pk": 31,
+    "fields": {
+      "name": "Fedora Workstation",
+      "vendor": "Fedora Project",
+      "platform_type": "DESKTOP",
+      "supports_domain_join": false
+    }
+  },
+  {
+    "model": "inventory.osfamily",
+    "pk": 40,
+    "fields": {
+      "name": "Android",
+      "vendor": "Google",
+      "platform_type": "MOBILE",
+      "supports_domain_join": false
+    }
+  },
+  {
+    "model": "inventory.osfamily",
+    "pk": 41,
+    "fields": {
+      "name": "iOS",
+      "vendor": "Apple",
+      "platform_type": "MOBILE",
+      "supports_domain_join": false
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 1,
+    "fields": {
+      "family": 1,
+      "version": "SP1",
+      "codename": "",
+      "release_date": "2009-10-22",
+      "end_of_support_date": "2020-01-14",
+      "is_lts": false,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 2,
+    "fields": {
+      "family": 2,
+      "version": "RTM",
+      "codename": "",
+      "release_date": "2012-10-26",
+      "end_of_support_date": "2016-01-12",
+      "is_lts": false,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 3,
+    "fields": {
+      "family": 3,
+      "version": "Update 3",
+      "codename": "",
+      "release_date": "2013-10-17",
+      "end_of_support_date": "2023-01-10",
+      "is_lts": false,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 10,
+    "fields": {
+      "family": 4,
+      "version": "1507",
+      "codename": "",
+      "release_date": "2015-07-29",
+      "end_of_support_date": "2017-05-09",
+      "is_lts": false,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 11,
+    "fields": {
+      "family": 4,
+      "version": "1607",
+      "codename": "Anniversary Update",
+      "release_date": "2016-08-02",
+      "end_of_support_date": "2018-04-10",
+      "is_lts": false,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 12,
+    "fields": {
+      "family": 4,
+      "version": "1809",
+      "codename": "October 2018 Update",
+      "release_date": "2018-11-13",
+      "end_of_support_date": "2020-11-10",
+      "is_lts": false,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 13,
+    "fields": {
+      "family": 4,
+      "version": "21H2",
+      "codename": "",
+      "release_date": "2021-11-16",
+      "end_of_support_date": "2025-06-10",
+      "is_lts": false,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 14,
+    "fields": {
+      "family": 4,
+      "version": "22H2",
+      "codename": "",
+      "release_date": "2022-10-18",
+      "end_of_support_date": "2025-10-14",
+      "is_lts": false,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 20,
+    "fields": {
+      "family": 5,
+      "version": "21H2",
+      "codename": "",
+      "release_date": "2021-10-04",
+      "end_of_support_date": "2024-10-08",
+      "is_lts": false,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 21,
+    "fields": {
+      "family": 5,
+      "version": "22H2",
+      "codename": "",
+      "release_date": "2022-09-20",
+      "end_of_support_date": "2025-10-14",
+      "is_lts": false,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 22,
+    "fields": {
+      "family": 5,
+      "version": "23H2",
+      "codename": "",
+      "release_date": "2023-10-31",
+      "end_of_support_date": "2026-11-10",
+      "is_lts": false,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 23,
+    "fields": {
+      "family": 5,
+      "version": "24H2",
+      "codename": "",
+      "release_date": "2024-10-01",
+      "end_of_support_date": "2027-10-12",
+      "is_lts": false,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 30,
+    "fields": {
+      "family": 6,
+      "version": "SP1",
+      "codename": "",
+      "release_date": "2009-10-22",
+      "end_of_support_date": "2020-01-14",
+      "is_lts": false,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 31,
+    "fields": {
+      "family": 7,
+      "version": "Update 3",
+      "codename": "",
+      "release_date": "2013-10-18",
+      "end_of_support_date": "2023-10-10",
+      "is_lts": false,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 32,
+    "fields": {
+      "family": 8,
+      "version": "1607",
+      "codename": "",
+      "release_date": "2016-10-15",
+      "end_of_support_date": "2027-01-11",
+      "is_lts": true,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 33,
+    "fields": {
+      "family": 9,
+      "version": "1809",
+      "codename": "",
+      "release_date": "2018-11-13",
+      "end_of_support_date": "2029-01-09",
+      "is_lts": true,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 34,
+    "fields": {
+      "family": 10,
+      "version": "21H2",
+      "codename": "",
+      "release_date": "2021-08-18",
+      "end_of_support_date": "2031-10-13",
+      "is_lts": true,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 35,
+    "fields": {
+      "family": 11,
+      "version": "RTM",
+      "codename": "",
+      "release_date": "2024-11-01",
+      "end_of_support_date": "2034-10-10",
+      "is_lts": true,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 100,
+    "fields": {
+      "family": 20,
+      "version": "20.04",
+      "codename": "Focal Fossa",
+      "release_date": "2020-04-23",
+      "end_of_support_date": "2025-04-23",
+      "is_lts": true,
+      "kernel_version": "5.4"
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 101,
+    "fields": {
+      "family": 20,
+      "version": "22.04",
+      "codename": "Jammy Jellyfish",
+      "release_date": "2022-04-21",
+      "end_of_support_date": "2027-04-21",
+      "is_lts": true,
+      "kernel_version": "5.15"
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 102,
+    "fields": {
+      "family": 20,
+      "version": "24.04",
+      "codename": "Noble Numbat",
+      "release_date": "2024-04-25",
+      "end_of_support_date": "2029-04-30",
+      "is_lts": true,
+      "kernel_version": "6.8"
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 110,
+    "fields": {
+      "family": 21,
+      "version": "11",
+      "codename": "Bullseye",
+      "release_date": "2021-08-14",
+      "end_of_support_date": "2026-08-14",
+      "is_lts": true,
+      "kernel_version": "5.10"
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 111,
+    "fields": {
+      "family": 21,
+      "version": "12",
+      "codename": "Bookworm",
+      "release_date": "2023-06-10",
+      "end_of_support_date": "2028-06-10",
+      "is_lts": true,
+      "kernel_version": "6.1"
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 120,
+    "fields": {
+      "family": 22,
+      "version": "9",
+      "codename": "",
+      "release_date": "2021-12-03",
+      "end_of_support_date": "2027-05-31",
+      "is_lts": false,
+      "kernel_version": "5.14"
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 121,
+    "fields": {
+      "family": 23,
+      "version": "9.3",
+      "codename": "",
+      "release_date": "2023-11-20",
+      "end_of_support_date": "2032-05-31",
+      "is_lts": false,
+      "kernel_version": "5.14"
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 122,
+    "fields": {
+      "family": 24,
+      "version": "9.3",
+      "codename": "",
+      "release_date": "2023-11-13",
+      "end_of_support_date": "2032-05-31",
+      "is_lts": false,
+      "kernel_version": "5.14"
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 130,
+    "fields": {
+      "family": 30,
+      "version": "13",
+      "codename": "Ventura",
+      "release_date": "2022-10-24",
+      "end_of_support_date": "2025-10-24",
+      "is_lts": false,
+      "kernel_version": "22.0"
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 131,
+    "fields": {
+      "family": 30,
+      "version": "14",
+      "codename": "Sonoma",
+      "release_date": "2023-09-26",
+      "end_of_support_date": "2026-09-26",
+      "is_lts": false,
+      "kernel_version": "23.0"
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 132,
+    "fields": {
+      "family": 30,
+      "version": "15",
+      "codename": "Sequoia",
+      "release_date": "2024-09-16",
+      "end_of_support_date": "2027-09-16",
+      "is_lts": false,
+      "kernel_version": "24.0"
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 140,
+    "fields": {
+      "family": 31,
+      "version": "39",
+      "codename": "",
+      "release_date": "2023-11-07",
+      "end_of_support_date": "2024-11-12",
+      "is_lts": false,
+      "kernel_version": "6.5"
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 141,
+    "fields": {
+      "family": 31,
+      "version": "40",
+      "codename": "",
+      "release_date": "2024-04-23",
+      "end_of_support_date": "2025-05-13",
+      "is_lts": false,
+      "kernel_version": "6.8"
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 150,
+    "fields": {
+      "family": 40,
+      "version": "13",
+      "codename": "Tiramisu",
+      "release_date": "2022-08-15",
+      "end_of_support_date": "2026-08-15",
+      "is_lts": false,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 151,
+    "fields": {
+      "family": 40,
+      "version": "14",
+      "codename": "Upside Down Cake",
+      "release_date": "2023-10-04",
+      "end_of_support_date": "2027-10-04",
+      "is_lts": false,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 152,
+    "fields": {
+      "family": 40,
+      "version": "15",
+      "codename": "Vanilla Ice Cream",
+      "release_date": "2024-10-15",
+      "end_of_support_date": "2028-10-15",
+      "is_lts": false,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 160,
+    "fields": {
+      "family": 41,
+      "version": "16",
+      "codename": "",
+      "release_date": "2022-09-12",
+      "end_of_support_date": "2027-09-12",
+      "is_lts": false,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 161,
+    "fields": {
+      "family": 41,
+      "version": "17",
+      "codename": "",
+      "release_date": "2023-09-18",
+      "end_of_support_date": "2028-09-18",
+      "is_lts": false,
+      "kernel_version": ""
+    }
+  },
+  {
+    "model": "inventory.osversion",
+    "pk": 162,
+    "fields": {
+      "family": 41,
+      "version": "18",
+      "codename": "",
+      "release_date": "2024-09-16",
+      "end_of_support_date": "2029-09-16",
+      "is_lts": false,
+      "kernel_version": ""
+    }
+  }
+]

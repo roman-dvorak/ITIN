@@ -1,0 +1,42 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-itin}
+      POSTGRES_USER: ${POSTGRES_USER:-itin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-itin}
+    volumes:
+      - pg_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-itin} -d ${POSTGRES_DB:-itin}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: .
+    command: >
+      sh -c "python manage.py collectstatic --noinput &&
+             daphne -b 0.0.0.0 -p 8000 itin.asgi:application"
+    environment:
+      DJANGO_DEBUG: 0
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost}
+      POSTGRES_DB: ${POSTGRES_DB:-itin}
+      POSTGRES_USER: ${POSTGRES_USER:-itin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-itin}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+    volumes:
+      - static_data:/app/staticfiles
+      - exports:/exports
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pg_data_prod:
+  static_data:
+  exports:
