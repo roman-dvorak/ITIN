@@ -15,7 +15,15 @@ from .views import (
     AssetPortInterfaceCreateView,
     AssetPortInterfaceUpdateView,
     AssetPortUpdateView,
+    GuestApprovalListView,
+    GuestApproveView,
+    GuestRejectView,
+    GuestSelfRegisterView,
     HomeView,
+    OSCatalogView,
+    LocationDetailView,
+    LocationDetailLegacyRedirectView,
+    LocationTreeView,
     UserDetailView,
     UserListView,
 )
@@ -24,6 +32,10 @@ app_name = "inventory"
 
 urlpatterns = [
     path("", HomeView.as_view(), name="home"),
+    path("os/", OSCatalogView.as_view(), name="os-catalog"),
+    path("locations/", LocationTreeView.as_view(), name="location-tree"),
+    path("locations/<int:pk>/<slug:slug>/", LocationDetailView.as_view(), name="location-detail"),
+    path("locations/<int:pk>/", LocationDetailLegacyRedirectView.as_view(), name="location-detail-legacy"),
     path("asset/", AssetListView.as_view(), name="asset-list"),
     path("asset/create/", AssetCreateView.as_view(), name="asset-create"),
     path("asset/export/", AssetExportView.as_view(), name="asset-export"),
@@ -46,6 +58,10 @@ urlpatterns = [
         name="asset-port-interface-update",
     ),
     path("asset/overview/", AssetOverviewView.as_view(), name="asset-overview"),
+    path("guest/register/", GuestSelfRegisterView.as_view(), name="guest-register"),
+    path("guest/approvals/", GuestApprovalListView.as_view(), name="guest-approvals"),
+    path("guest/<int:pk>/approve/", GuestApproveView.as_view(), name="guest-approve"),
+    path("guest/<int:pk>/reject/", GuestRejectView.as_view(), name="guest-reject"),
     path("user/", UserListView.as_view(), name="user-list"),
     path("user/<int:pk>/", UserDetailView.as_view(), name="user-detail"),
 ]

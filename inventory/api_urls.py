@@ -3,11 +3,16 @@ from rest_framework.routers import DefaultRouter
 
 from .api_views import (
     ApiLoginView,
+    GuestApproveAPIView,
+    GuestPendingApprovalAPIView,
+    GuestRejectAPIView,
+    GuestSelfRegistrationAPIView,
     AssetPortInterfaceCreateAPIView,
     AssetViewSet,
     BulkAssetUpdateAPIView,
     BulkInterfaceUpdateAPIView,
     GroupLookupAPIView,
+    LocationViewSet,
     NetworkInterfaceViewSet,
     NetworkLookupAPIView,
     OSFamilyLookupAPIView,
@@ -20,11 +25,16 @@ app_name = "inventory-api"
 
 router = DefaultRouter()
 router.register("assets", AssetViewSet, basename="asset")
+router.register("locations", LocationViewSet, basename="location")
 router.register("interfaces", NetworkInterfaceViewSet, basename="interface")
 router.register("ports", PortViewSet, basename="port")
 
 urlpatterns = [
     path("auth/login/", ApiLoginView.as_view(), name="api-login"),
+    path("guests/register/", GuestSelfRegistrationAPIView.as_view(), name="guest-register"),
+    path("guests/pending/", GuestPendingApprovalAPIView.as_view(), name="guest-pending"),
+    path("guests/<int:pk>/approve/", GuestApproveAPIView.as_view(), name="guest-approve"),
+    path("guests/<int:pk>/reject/", GuestRejectAPIView.as_view(), name="guest-reject"),
     path(
         "assets/<int:asset_id>/port-interface/",
         AssetPortInterfaceCreateAPIView.as_view(),

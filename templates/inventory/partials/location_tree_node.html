@@ -1,0 +1,20 @@
+<li>
+  <div class="rounded border border-slate-200 bg-slate-50 px-3 py-2">
+    <div class="flex items-center justify-between gap-3">
+      <div class="min-w-0">
+        <a href="{% url 'inventory:location-detail' node.location.id node.location.slug %}" class="font-medium text-slate-900 hover:text-blue-700">
+          {{ node.location.name }}
+        </a>
+        <div class="text-xs text-slate-500">{{ node.location.path_label }}</div>
+      </div>
+      <div class="shrink-0 text-xs text-slate-600">Assets: {{ node.asset_count }}</div>
+    </div>
+  </div>
+  {% if node.children %}
+    <ul class="ml-5 mt-2 space-y-2 border-l border-slate-200 pl-3">
+      {% for node in node.children %}
+        {% include "inventory/partials/location_tree_node.html" with node=node %}
+      {% endfor %}
+    </ul>
+  {% endif %}
+</li>

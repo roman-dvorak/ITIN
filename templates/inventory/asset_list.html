@@ -83,7 +83,7 @@
       <select name="os_family" multiple class="select2 w-full rounded border border-slate-300 px-3 py-2 text-sm" data-placeholder="All OS families">
         {% for family in os_family_choices %}
           <option value="{{ family.id }}" {% if family.id|stringformat:"s" in os_family_filters %}selected{% endif %}>
-            {{ family.name }}
+            {{ family.get_family_display }} | {{ family.name_flavor }}
           </option>
         {% endfor %}
       </select>

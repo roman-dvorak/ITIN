@@ -13,10 +13,11 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
 
-from .access import can_edit_asset, visible_assets_for_user
+from .access import can_edit_asset, visible_assets_for_user, visible_locations_for_user
 from .forms import (
     AssetEditForm,
     AssetOSFeaturesForm,
+    GuestSelfRegistrationForm,
     PortCreateForm,
     PortEditForm,
     PortInterfaceCreateForm,
@@ -31,6 +32,7 @@ from .models import (
     NetworkInterface,
     OrganizationalGroup,
     OSFamily,
+    Location,
     Port,
 )
 
@@ -90,10 +92,9 @@ def with_asset_table_related(queryset):
             )
         )
     )
-    return queryset.select_related("owner").prefetch_related(
+    return queryset.select_related("owner", "location", "location__parent").prefetch_related(
         "groups",
         "os_entries__family",
-        "os_entries__version",
         Prefetch("interfaces", queryset=interface_queryset),
     )
 
@@ -242,7 +243,10 @@ class HomeView(LoginRequiredMixin, TemplateView):
         groups = visible_groups_for_user(user)
         now = timezone.now()
 
-        guest_devices = GuestDevice.objects.filter(groups__in=groups).distinct()
+        if user.is_superuser:
+            guest_devices = GuestDevice.objects.all()
+        else:
+            guest_devices = GuestDevice.objects.filter(Q(sponsor=user) | Q(groups__in=groups)).distinct()
         status_items = (
             assets.values("status")
             .annotate(total=Count("id"))
@@ -263,17 +267,31 @@ class HomeView(LoginRequiredMixin, TemplateView):
         active_ports = Port.objects.filter(asset__in=assets, active=True).count()
         os_items = (
             computers.filter(os_entries__isnull=False)
-            .values("os_entries__family__name")
+            .values("os_entries__family__family", "os_entries__family__name", "os_entries__family__flavor")
             .annotate(total=Count("id"))
-            .order_by("os_entries__family__name")
+            .order_by("os_entries__family__family", "os_entries__family__name", "os_entries__family__flavor")
         )
+        family_labels = dict(OSFamily.FamilyType.choices)
         os_distribution = [
-            {"label": item["os_entries__family__name"], "count": item["total"]}
+            {
+                "family": family_labels.get(
+                    item["os_entries__family__family"],
+                    item["os_entries__family__family"] or "Other",
+                ),
+                "name": item["os_entries__family__name"],
+                "flavor": item["os_entries__family__flavor"],
+                "label": (
+                    f"{item['os_entries__family__name']} - {item['os_entries__family__flavor']}"
+                    if item["os_entries__family__flavor"]
+                    else item["os_entries__family__name"]
+                ),
+                "count": item["total"],
+            }
             for item in os_items
         ]
         without_os = computers.filter(os_entries__isnull=True).distinct().count()
         if without_os:
-            os_distribution.append({"label": "Without OS", "count": without_os})
+            os_distribution.append({"family": "No OS", "name": "Without OS", "flavor": None, "label": "Without OS", "count": without_os})
         asset_type_distribution = [
             {"label": label, "count": assets.filter(asset_type=code).count()}
             for code, label in Asset.AssetType.choices
@@ -295,7 +313,12 @@ class HomeView(LoginRequiredMixin, TemplateView):
                 "total_computers": computers.count(),
                 "total_groups": groups.count(),
                 "total_networks": Network.objects.count(),
-                "active_guests": guest_devices.filter(enabled=True, valid_from__lte=now, valid_until__gte=now).count(),
+                "active_guests": guest_devices.filter(
+                    enabled=True,
+                    approval_status=GuestDevice.ApprovalStatus.APPROVED,
+                    valid_from__lte=now,
+                    valid_until__gte=now,
+                ).count(),
                 "assets_with_ip": assets.filter(interfaces__ip_addresses__active=True).distinct().count(),
                 "assets_with_os": assets_with_os,
                 "assets_without_os": assets_without_os,
@@ -344,16 +367,20 @@ class AssetListView(LoginRequiredMixin, ListView):
             asset.mac_extra_count = max(len(mac_addresses) - 2, 0)
             os_labels = []
             for os_entry in asset.os_entries.all():
-                label = os_entry.family.name
+                label = os_entry.family.name_flavor
                 if os_entry.version:
-                    label = f"{label} {os_entry.version.version}"
+                    label = f"{label} {os_entry.version}"
                 os_labels.append(label)
             asset.os_display = ", ".join(os_labels)
 
         asset_ids = [asset.id for asset in assets_for_table]
         owners = User.objects.filter(owned_assets__id__in=asset_ids).distinct().order_by("email")
         groups = OrganizationalGroup.objects.filter(assets__id__in=asset_ids).distinct().order_by("name")
-        os_families = OSFamily.objects.filter(assetos__asset__id__in=asset_ids).distinct().order_by("name")
+        os_families = (
+            OSFamily.objects.filter(assetos__asset__id__in=asset_ids)
+            .distinct()
+            .order_by("family", "name", "flavor", "id")
+        )
         params = self.request.GET.copy()
         params.pop("page", None)
         params_without_per_page = params.copy()
@@ -565,11 +592,10 @@ class AssetDetailView(LoginRequiredMixin, DetailView):
     def get_queryset(self):
         return (
             visible_assets_for_user(self.request.user)
-            .select_related("owner")
+            .select_related("owner", "location", "location__parent")
             .prefetch_related(
                 "groups",
                 "os_entries__family",
-                "os_entries__version",
                 "interfaces__ip_addresses__network",
                 "ports__port_interfaces__ip_addresses__network",
             )
@@ -593,9 +619,132 @@ class AssetOverviewView(LoginRequiredMixin, TemplateView):
         return context
 
 
+class OSCatalogView(LoginRequiredMixin, TemplateView):
+    template_name = "inventory/os_catalog.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        visible_assets = visible_assets_for_user(self.request.user)
+        os_items = (
+            OSFamily.objects.annotate(
+                total_assets=Count(
+                    "assetos__asset",
+                    filter=Q(assetos__asset__in=visible_assets),
+                    distinct=True,
+                )
+            )
+            .order_by("family", "name", "flavor", "id")
+        )
+        context["os_items"] = os_items
+        context["can_access_admin"] = user_has_admin_access(self.request.user)
+        return context
+
+
+def build_location_tree(location_queryset):
+    locations = list(location_queryset.select_related("parent").prefetch_related("groups"))
+    nodes = {
+        location.id: {
+            "location": location,
+            "children": [],
+        }
+        for location in locations
+    }
+
+    root_nodes = []
+    for location in locations:
+        node = nodes[location.id]
+        if location.parent_id and location.parent_id in nodes:
+            nodes[location.parent_id]["children"].append(node)
+        else:
+            root_nodes.append(node)
+
+    def sort_node(node):
+        node["children"].sort(key=lambda item: (item["location"].name.lower(), item["location"].id))
+        for child in node["children"]:
+            sort_node(child)
+
+    root_nodes.sort(key=lambda item: (item["location"].name.lower(), item["location"].id))
+    for root in root_nodes:
+        sort_node(root)
+    return root_nodes
+
+
+class LocationTreeView(LoginRequiredMixin, TemplateView):
+    template_name = "inventory/location_tree.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        visible_locations = visible_locations_for_user(self.request.user)
+        location_nodes = build_location_tree(visible_locations)
+        location_ids = list(visible_locations.values_list("id", flat=True))
+        assets_in_locations = (
+            visible_assets_for_user(self.request.user)
+            .filter(location_id__in=location_ids)
+            .values("location_id")
+            .annotate(total=Count("id"))
+        )
+        asset_counts = {item["location_id"]: item["total"] for item in assets_in_locations}
+
+        def attach_counts(node):
+            location = node["location"]
+            node["asset_count"] = asset_counts.get(location.id, 0)
+            for child in node["children"]:
+                attach_counts(child)
+
+        for root in location_nodes:
+            attach_counts(root)
+
+        context["location_nodes"] = location_nodes
+        context["can_access_admin"] = user_has_admin_access(self.request.user)
+        return context
+
+
+class LocationDetailView(LoginRequiredMixin, DetailView):
+    model = Location
+    template_name = "inventory/location_detail.html"
+    context_object_name = "location"
+    query_pk_and_slug = True
+
+    def get_queryset(self):
+        return visible_locations_for_user(self.request.user).prefetch_related("groups")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        location = context["location"]
+        visible_locations = visible_locations_for_user(self.request.user)
+        context["visible_children"] = visible_locations.filter(parent=location).prefetch_related("groups")
+        location_assets = list(
+            with_asset_table_related(
+                visible_assets_for_user(self.request.user).filter(location=location)
+            )
+        )
+        for asset in location_assets:
+            mac_addresses = [interface.mac_address for interface in asset.interfaces.all() if interface.mac_address]
+            asset.mac_preview = mac_addresses[:2]
+            asset.mac_extra_count = max(len(mac_addresses) - 2, 0)
+            os_labels = []
+            for os_entry in asset.os_entries.all():
+                label = os_entry.family.name_flavor
+                if os_entry.version:
+                    label = f"{label} {os_entry.version}"
+                os_labels.append(label)
+            asset.os_display = ", ".join(os_labels)
+        context["location_assets"] = location_assets
+        context["can_access_admin"] = user_has_admin_access(self.request.user)
+        return context
+
+
+class LocationDetailLegacyRedirectView(LoginRequiredMixin, View):
+    def get(self, request, pk):
+        location = get_object_or_404(visible_locations_for_user(request.user), pk=pk)
+        return redirect(location.get_absolute_url())
+
+
 def get_editable_asset_or_403(user, pk):
     asset = get_object_or_404(
-        visible_assets_for_user(user).select_related("owner").prefetch_related("os_entries__family", "os_entries__version"),
+        visible_assets_for_user(user)
+        .select_related("owner", "location", "location__parent")
+        .prefetch_related("os_entries__family"),
         pk=pk,
     )
     if not can_edit_asset(user, asset):
@@ -653,7 +802,7 @@ class AssetEditView(LoginRequiredMixin, View):
                 for interface in item["interfaces"]
             ]
         if os_row_forms is None:
-            os_rows = list(asset.os_entries.select_related("family", "version").order_by("-id"))
+            os_rows = list(asset.os_entries.select_related("family").order_by("-id"))
             os_row_forms = [
                 {"record": row, "form": AssetOSFeaturesForm(instance=row, prefix=f"os-row-{row.id}")}
                 for row in os_rows
@@ -675,7 +824,7 @@ class AssetOSCreateView(LoginRequiredMixin, View):
         form = AssetOSFeaturesForm(request.POST, prefix="os-new")
         if form.is_valid():
             if form.cleaned_data.get("family") is None:
-                messages.error(request, "OS family is required.")
+                messages.error(request, "OS is required.")
             else:
                 os_record = form.save(commit=False)
                 os_record.asset = asset
@@ -701,7 +850,7 @@ class AssetOSUpdateView(LoginRequiredMixin, View):
         form = AssetOSFeaturesForm(request.POST, instance=os_record, prefix=f"os-row-{os_record.id}")
         if form.is_valid():
             if form.cleaned_data.get("family") is None:
-                messages.error(request, "OS family is required.")
+                messages.error(request, "OS is required.")
             else:
                 form.save()
                 messages.success(request, "OS entry updated.")
@@ -808,6 +957,104 @@ class AssetPortInterfaceUpdateView(LoginRequiredMixin, View):
             for field, errors in form.errors.items():
                 messages.error(request, f"Interface {field}: {' '.join(errors)}")
         return redirect("inventory:asset-edit", pk=asset.pk)
+
+
+class GuestSelfRegisterView(View):
+    template_name = "inventory/guest_register.html"
+
+    def get(self, request):
+        form = GuestSelfRegistrationForm(user=request.user)
+        return render(request, self.template_name, {"form": form, "is_authenticated_user": request.user.is_authenticated})
+
+    def post(self, request):
+        form = GuestSelfRegistrationForm(request.POST, user=request.user)
+        if form.is_valid():
+            guest = form.save()
+            messages.success(
+                request,
+                (
+                    f"Registration submitted for {guest.mac_address}. "
+                    f"Responsible person ({guest.sponsor.email}) must approve it."
+                ),
+            )
+            return redirect("inventory:guest-register")
+        return render(
+            request,
+            self.template_name,
+            {"form": form, "is_authenticated_user": request.user.is_authenticated},
+            status=400,
+        )
+
+
+class GuestApprovalListView(LoginRequiredMixin, TemplateView):
+    template_name = "inventory/guest_approvals.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        now = timezone.now()
+        user = self.request.user
+        queryset = GuestDevice.objects.select_related("sponsor", "approved_by", "network").order_by("-created_at")
+        if not user.is_superuser:
+            queryset = queryset.filter(sponsor=user)
+
+        context["pending_requests"] = queryset.filter(approval_status=GuestDevice.ApprovalStatus.PENDING)
+        context["recent_requests"] = queryset[:100]
+        context["active_count"] = queryset.filter(
+            enabled=True,
+            approval_status=GuestDevice.ApprovalStatus.APPROVED,
+            valid_from__lte=now,
+            valid_until__gte=now,
+        ).count()
+        context["now"] = now
+        context["can_access_admin"] = user_has_admin_access(user)
+        context["is_superuser"] = user.is_superuser
+        return context
+
+
+class GuestApproveView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        guest = get_object_or_404(GuestDevice.objects.select_related("sponsor"), pk=pk)
+        if not request.user.is_superuser and guest.sponsor_id != request.user.id:
+            raise PermissionDenied("Missing permission to approve this guest request.")
+        if guest.approval_status != GuestDevice.ApprovalStatus.PENDING:
+            messages.error(request, "Only pending requests can be approved.")
+            return redirect("inventory:guest-approvals")
+
+        guest.approval_status = GuestDevice.ApprovalStatus.APPROVED
+        guest.enabled = True
+        guest.approved_by = request.user
+        guest.approved_at = timezone.now()
+        guest.rejected_reason = ""
+        guest.save(
+            update_fields=[
+                "approval_status",
+                "enabled",
+                "approved_by",
+                "approved_at",
+                "rejected_reason",
+                "updated_at",
+            ]
+        )
+        messages.success(request, f"Guest device {guest.mac_address} approved.")
+        return redirect("inventory:guest-approvals")
+
+
+class GuestRejectView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        guest = get_object_or_404(GuestDevice.objects.select_related("sponsor"), pk=pk)
+        if not request.user.is_superuser and guest.sponsor_id != request.user.id:
+            raise PermissionDenied("Missing permission to reject this guest request.")
+        if guest.approval_status != GuestDevice.ApprovalStatus.PENDING:
+            messages.error(request, "Only pending requests can be rejected.")
+            return redirect("inventory:guest-approvals")
+
+        reason = request.POST.get("reason", "").strip()
+        guest.approval_status = GuestDevice.ApprovalStatus.REJECTED
+        guest.enabled = False
+        guest.rejected_reason = reason
+        guest.save(update_fields=["approval_status", "enabled", "rejected_reason", "updated_at"])
+        messages.success(request, f"Guest device {guest.mac_address} rejected.")
+        return redirect("inventory:guest-approvals")
 
 
 class UserListView(LoginRequiredMixin, ListView):

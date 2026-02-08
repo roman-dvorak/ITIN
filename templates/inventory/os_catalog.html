@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}OS Catalog | IT Asset Tracker{% endblock %}
+
+{% block content %}
+  <div class="mb-6 flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-semibold">Operating Systems</h1>
+      <p class="text-sm text-slate-600">OS catalog with support flag and quick links to filtered assets.</p>
+    </div>
+    {% if can_access_admin %}
+      <a href="{% url 'admin:inventory_osfamily_changelist' %}" class="rounded border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100">Admin OS catalog</a>
+    {% endif %}
+  </div>
+
+  <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+    <table class="min-w-full divide-y divide-slate-200 text-sm">
+      <thead class="bg-slate-50">
+        <tr>
+          <th class="px-3 py-2 text-left font-medium text-slate-600">Family</th>
+          <th class="px-3 py-2 text-left font-medium text-slate-600">Name - Flavor</th>
+          <th class="px-3 py-2 text-left font-medium text-slate-600">Support</th>
+          <th class="px-3 py-2 text-left font-medium text-slate-600">Assets</th>
+          <th class="px-3 py-2 text-left font-medium text-slate-600">Action</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-200">
+        {% for os_item in os_items %}
+          <tr>
+            <td class="px-3 py-2">{{ os_item.get_family_display }}</td>
+            <td class="px-3 py-2 font-medium text-slate-900">{{ os_item.name_flavor }}</td>
+            <td class="px-3 py-2">
+              {% if os_item.support_status == "SUPPORTED" %}
+                <span class="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">Supported</span>
+              {% else %}
+                <span class="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">Unsupported</span>
+              {% endif %}
+            </td>
+            <td class="px-3 py-2">{{ os_item.total_assets }}</td>
+            <td class="px-3 py-2">
+              <div class="flex items-center gap-2">
+                <a href="{% url 'inventory:asset-list' %}?os_family={{ os_item.id }}" class="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100">View assets</a>
+                {% if can_access_admin %}
+                  <a
+                    href="{% url 'admin:inventory_osfamily_change' os_item.id %}"
+                    class="inline-flex h-7 w-7 items-center justify-center rounded border border-slate-300 text-slate-700 hover:bg-slate-100"
+                    title="Edit in admin"
+                    aria-label="Edit in admin"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path d="M13.586 3.586a2 2 0 112.828 2.828l-9.9 9.9a1 1 0 01-.42.255l-3 1a1 1 0 01-1.265-1.265l1-3a1 1 0 01.255-.42l9.9-9.9zM12.172 5L4.35 12.822l-.564 1.693 1.693-.564L13.3 6.13 12.172 5z" />
+                    </svg>
+                  </a>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="5" class="px-3 py-3 text-slate-500">No OS entries.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}

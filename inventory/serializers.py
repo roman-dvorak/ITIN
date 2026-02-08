@@ -1,17 +1,22 @@
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils import timezone
 from rest_framework import serializers
 
+from .access import assignable_location_ids_for_user
 from .models import (
     Asset,
     AssetOS,
+    GuestDevice,
     IPAddress,
+    Location,
     Network,
     NetworkInterface,
     OrganizationalGroup,
     OSFamily,
-    OSVersion,
     Port,
+    normalize_mac,
+    validate_mac,
 )
 
 User = get_user_model()
@@ -21,7 +26,7 @@ def _get_primary_os(asset):
     if hasattr(asset, "_prefetched_objects_cache") and "os_entries" in asset._prefetched_objects_cache:
         entries = asset._prefetched_objects_cache["os_entries"]
         return entries[0] if entries else None
-    return asset.os_entries.select_related("family", "version").order_by("-id").first()
+    return asset.os_entries.select_related("family").order_by("-id").first()
 
 
 def _raise_drf_validation(error: DjangoValidationError):
@@ -68,15 +73,33 @@ class GroupCreateSerializer(serializers.ModelSerializer):
 
 
 class OSFamilyLookupSerializer(serializers.ModelSerializer):
+    family_label = serializers.CharField(source="get_family_display", read_only=True)
+    support_status_label = serializers.CharField(source="get_support_status_display", read_only=True)
+    label = serializers.SerializerMethodField()
+
     class Meta:
         model = OSFamily
-        fields = ("id", "name", "vendor", "platform_type", "supports_domain_join")
+        fields = (
+            "id",
+            "family",
+            "family_label",
+            "name",
+            "flavor",
+            "label",
+            "support_status",
+            "support_status_label",
+        )
+
+    def get_label(self, obj):
+        if obj.support_status == OSFamily.SupportStatus.UNSUPPORTED:
+            return f"{obj.name_flavor} [Unsupported]"
+        return obj.name_flavor
 
 
 class OSFamilyCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = OSFamily
-        fields = ("id", "name", "vendor", "platform_type", "supports_domain_join")
+        fields = ("id", "family", "name", "flavor", "support_status")
         read_only_fields = ("id",)
 
     def create(self, validated_data):
@@ -88,27 +111,8 @@ class OSFamilyCreateSerializer(serializers.ModelSerializer):
         family.save()
         return family
 
-
-class OSVersionLookupSerializer(serializers.ModelSerializer):
-    family_id = serializers.IntegerField(source="family.id", read_only=True)
-
-    class Meta:
-        model = OSVersion
-        fields = (
-            "id",
-            "family_id",
-            "version",
-            "codename",
-            "release_date",
-            "end_of_support_date",
-            "is_lts",
-            "kernel_version",
-        )
-
-
 class AssetOSNestedSerializer(serializers.ModelSerializer):
     family = OSFamilyLookupSerializer(read_only=True)
-    version = OSVersionLookupSerializer(read_only=True)
 
     class Meta:
         model = AssetOS
@@ -127,6 +131,210 @@ class NetworkLookupSerializer(serializers.ModelSerializer):
     class Meta:
         model = Network
         fields = ("id", "name", "cidr", "vlan_id")
+
+
+class LocationLookupSerializer(serializers.ModelSerializer):
+    path = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Location
+        fields = ("id", "name", "slug", "parent", "path")
+
+    def get_path(self, obj):
+        return obj.path_label
+
+
+class LocationDetailSerializer(serializers.ModelSerializer):
+    parent = LocationLookupSerializer(read_only=True)
+    groups = GroupLookupSerializer(many=True, read_only=True)
+    path = serializers.SerializerMethodField()
+    children = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Location
+        fields = (
+            "id",
+            "name",
+            "slug",
+            "parent",
+            "path",
+            "description",
+            "metadata",
+            "groups",
+            "children",
+            "created_at",
+            "updated_at",
+        )
+
+    def get_path(self, obj):
+        return obj.path_label
+
+    def get_children(self, obj):
+        visible_ids = self.context.get("visible_location_ids")
+        children = obj.children.order_by("name", "id")
+        if visible_ids is not None:
+            children = children.filter(id__in=visible_ids)
+        return LocationLookupSerializer(children, many=True, context=self.context).data
+
+
+class LocationWriteSerializer(serializers.ModelSerializer):
+    slug = serializers.SlugField(required=False, allow_blank=True)
+    groups = serializers.PrimaryKeyRelatedField(
+        queryset=OrganizationalGroup.objects.all(),
+        many=True,
+        required=False,
+    )
+    parent = serializers.PrimaryKeyRelatedField(
+        queryset=Location.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+
+    class Meta:
+        model = Location
+        fields = ("name", "slug", "parent", "description", "metadata", "groups")
+
+    def create(self, validated_data):
+        groups = validated_data.pop("groups", [])
+        location = Location(**validated_data)
+        try:
+            location.full_clean()
+        except DjangoValidationError as error:
+            _raise_drf_validation(error)
+        location.save()
+        if groups:
+            location.groups.set(groups)
+        return location
+
+    def update(self, instance, validated_data):
+        groups = validated_data.pop("groups", serializers.empty)
+        for key, value in validated_data.items():
+            setattr(instance, key, value)
+        try:
+            instance.full_clean()
+        except DjangoValidationError as error:
+            _raise_drf_validation(error)
+        instance.save()
+        if groups is not serializers.empty:
+            instance.groups.set(groups)
+        return instance
+
+
+class GuestDeviceSerializer(serializers.ModelSerializer):
+    responsible = UserLookupSerializer(source="sponsor", read_only=True)
+    network = NetworkLookupSerializer(read_only=True)
+    approved_by = UserLookupSerializer(read_only=True)
+    is_currently_active = serializers.SerializerMethodField()
+
+    class Meta:
+        model = GuestDevice
+        fields = (
+            "id",
+            "device_name",
+            "owner_name",
+            "owner_email",
+            "mac_address",
+            "description",
+            "network",
+            "responsible",
+            "approval_status",
+            "approved_by",
+            "approved_at",
+            "valid_from",
+            "valid_until",
+            "enabled",
+            "rejected_reason",
+            "is_currently_active",
+            "created_at",
+            "updated_at",
+        )
+
+    def get_is_currently_active(self, obj):
+        now = timezone.now()
+        return (
+            obj.enabled
+            and obj.approval_status == GuestDevice.ApprovalStatus.APPROVED
+            and obj.valid_from <= now <= obj.valid_until
+        )
+
+
+class GuestSelfRegistrationSerializer(serializers.Serializer):
+    device_name = serializers.CharField(required=False, allow_blank=True, max_length=200)
+    owner_name = serializers.CharField(required=True, allow_blank=False, max_length=200)
+    owner_email = serializers.EmailField(required=True)
+    mac_address = serializers.CharField(required=True, allow_blank=False, max_length=17)
+    responsible_email = serializers.EmailField(required=False, allow_blank=True)
+    network = serializers.PrimaryKeyRelatedField(queryset=Network.objects.all(), required=True)
+    valid_until = serializers.DateTimeField(required=True)
+    description = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate_mac_address(self, value):
+        mac_address = normalize_mac(value)
+        validate_mac(mac_address)
+        active_duplicate = GuestDevice.objects.filter(
+            mac_address=mac_address,
+            enabled=True,
+            approval_status=GuestDevice.ApprovalStatus.APPROVED,
+            valid_until__gte=timezone.now(),
+        )
+        if active_duplicate.exists():
+            raise serializers.ValidationError("This MAC address is already registered as an active guest device.")
+        return mac_address
+
+    def validate_responsible_email(self, value):
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            return ""
+        responsible_user = User.objects.filter(email__iexact=value, is_active=True).first()
+        if not responsible_user:
+            raise serializers.ValidationError("Responsible person email must belong to an active system user.")
+        self.context["responsible_user"] = responsible_user
+        return value.strip().lower()
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            self.context["responsible_user"] = request.user
+            return attrs
+
+        responsible_email = (attrs.get("responsible_email") or "").strip()
+        if not responsible_email:
+            raise serializers.ValidationError(
+                {"responsible_email": "Responsible person email is required for anonymous registration."}
+            )
+        return attrs
+
+    def validate_valid_until(self, value):
+        if value <= timezone.now():
+            raise serializers.ValidationError("Expiration must be in the future.")
+        return value
+
+    def create(self, validated_data):
+        validated_data.pop("responsible_email", None)
+        responsible_user = self.context["responsible_user"]
+        guest = GuestDevice(
+            device_name=validated_data.get("device_name", "").strip(),
+            owner_name=validated_data["owner_name"].strip(),
+            owner_email=validated_data["owner_email"].strip().lower(),
+            mac_address=validated_data["mac_address"],
+            sponsor=responsible_user,
+            network=validated_data["network"],
+            valid_from=timezone.now(),
+            valid_until=validated_data["valid_until"],
+            description=validated_data.get("description", "").strip(),
+            approval_status=GuestDevice.ApprovalStatus.PENDING,
+            enabled=False,
+        )
+        try:
+            guest.full_clean()
+        except DjangoValidationError as error:
+            _raise_drf_validation(error)
+        guest.save()
+        return guest
+
+
+class GuestApprovalDecisionSerializer(serializers.Serializer):
+    reason = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class PortLookupSerializer(serializers.ModelSerializer):
@@ -524,18 +732,18 @@ class AssetUpdateSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    location = serializers.PrimaryKeyRelatedField(
+        queryset=Location.objects.all(),
+        required=False,
+        allow_null=True,
+    )
     os_family = serializers.PrimaryKeyRelatedField(
         queryset=OSFamily.objects.all(),
         required=False,
         allow_null=True,
         write_only=True,
     )
-    os_version = serializers.PrimaryKeyRelatedField(
-        queryset=OSVersion.objects.all(),
-        required=False,
-        allow_null=True,
-        write_only=True,
-    )
+    os_version = serializers.CharField(required=False, allow_blank=True, allow_null=True, write_only=True)
 
     class Meta:
         model = Asset
@@ -547,6 +755,7 @@ class AssetUpdateSerializer(serializers.ModelSerializer):
             "manufacturer",
             "model",
             "owner",
+            "location",
             "groups",
             "status",
             "notes",
@@ -558,20 +767,34 @@ class AssetUpdateSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         os_family = attrs.get("os_family", serializers.empty)
         os_version = attrs.get("os_version", serializers.empty)
+        location = attrs.get("location", serializers.empty)
+        user = getattr(self.context.get("request"), "user", None)
 
-        if os_version not in (serializers.empty, None):
-            if os_family in (serializers.empty, None):
+        if os_version is not serializers.empty:
+            normalized_version = "" if os_version in (None, "") else str(os_version).strip()
+            attrs["os_version"] = normalized_version
+            if os_family is serializers.empty:
                 existing = _get_primary_os(self.instance)
-                if existing is None:
+                if existing is None and normalized_version:
                     raise serializers.ValidationError(
                         {"os_family": "os_family is required when setting os_version."}
                     )
-                os_family = existing.family
-                attrs["os_family"] = os_family
-            if os_version.family_id != os_family.id:
+                if existing is not None:
+                    attrs["os_family"] = existing.family
+            elif os_family is None and normalized_version:
                 raise serializers.ValidationError(
-                    {"os_version": "Selected OS version must belong to selected family."}
+                    {"os_family": "os_family cannot be null when os_version is set."}
                 )
+
+        if (
+            location not in (serializers.empty, None)
+            and user
+            and user.is_authenticated
+            and not user.is_superuser
+        ):
+            assignable_ids = assignable_location_ids_for_user(user)
+            if location.id not in assignable_ids:
+                raise serializers.ValidationError({"location": "Location is outside your permitted tree."})
 
         return attrs
 
@@ -592,7 +815,7 @@ class AssetUpdateSerializer(serializers.ModelSerializer):
         if groups is not serializers.empty:
             instance.groups.set(groups)
 
-        if os_family is not serializers.empty or os_version is not serializers.empty:
+        if os_family is not serializers.empty:
             if os_family is None:
                 AssetOS.objects.filter(asset=instance).delete()
             else:
@@ -600,12 +823,22 @@ class AssetUpdateSerializer(serializers.ModelSerializer):
                 if os_record is None:
                     os_record = AssetOS(asset=instance, family=os_family)
                 os_record.family = os_family
-                os_record.version = None if os_version in (serializers.empty, None) else os_version
+                if os_version is not serializers.empty:
+                    os_record.version = "" if os_version is None else str(os_version).strip()
                 try:
                     os_record.full_clean()
                 except DjangoValidationError as error:
                     _raise_drf_validation(error)
                 os_record.save()
+        elif os_version is not serializers.empty:
+            os_record = _get_primary_os(instance)
+            if os_record is not None:
+                os_record.version = "" if os_version is None else str(os_version).strip()
+                try:
+                    os_record.full_clean()
+                except DjangoValidationError as error:
+                    _raise_drf_validation(error)
+                os_record.save(update_fields=["version"])
 
         return instance
 
@@ -621,18 +854,18 @@ class AssetCreateSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    location = serializers.PrimaryKeyRelatedField(
+        queryset=Location.objects.all(),
+        required=False,
+        allow_null=True,
+    )
     os_family = serializers.PrimaryKeyRelatedField(
         queryset=OSFamily.objects.all(),
         required=False,
         allow_null=True,
         write_only=True,
     )
-    os_version = serializers.PrimaryKeyRelatedField(
-        queryset=OSVersion.objects.all(),
-        required=False,
-        allow_null=True,
-        write_only=True,
-    )
+    os_version = serializers.CharField(required=False, allow_blank=True, allow_null=True, write_only=True)
 
     class Meta:
         model = Asset
@@ -644,6 +877,7 @@ class AssetCreateSerializer(serializers.ModelSerializer):
             "manufacturer",
             "model",
             "owner",
+            "location",
             "groups",
             "status",
             "notes",
@@ -667,14 +901,18 @@ class AssetCreateSerializer(serializers.ModelSerializer):
 
         os_family = attrs.get("os_family")
         os_version = attrs.get("os_version")
-        if os_version is not None and os_family is None:
+        location = attrs.get("location")
+        if os_version not in (None, "") and os_family is None:
             raise serializers.ValidationError({"os_family": "os_family is required when setting os_version."})
-        if os_version is not None and os_version.family_id != os_family.id:
-            raise serializers.ValidationError({"os_version": "Selected OS version must belong to selected family."})
+        if location is not None and user and not user.is_superuser:
+            assignable_ids = assignable_location_ids_for_user(user)
+            if location.id not in assignable_ids:
+                raise serializers.ValidationError({"location": "Location is outside your permitted tree."})
+        if os_version is not None:
+            attrs["os_version"] = str(os_version).strip()
         return attrs
 
     def create(self, validated_data):
-        user = getattr(self.context.get("request"), "user", None)
         os_family = validated_data.pop("os_family", None)
         os_version = validated_data.pop("os_version", None)
         groups = validated_data.pop("groups", [])
@@ -690,7 +928,7 @@ class AssetCreateSerializer(serializers.ModelSerializer):
             asset.groups.set(groups)
 
         if os_family is not None:
-            os_record = AssetOS(asset=asset, family=os_family, version=os_version)
+            os_record = AssetOS(asset=asset, family=os_family, version=os_version or "")
             try:
                 os_record.full_clean()
             except DjangoValidationError as error:
@@ -702,6 +940,7 @@ class AssetCreateSerializer(serializers.ModelSerializer):
 class AssetListSerializer(serializers.ModelSerializer):
     owner = UserLookupSerializer(read_only=True)
     groups = GroupLookupSerializer(many=True, read_only=True)
+    location = serializers.SerializerMethodField()
     os_family = serializers.SerializerMethodField()
     os_version = serializers.SerializerMethodField()
     os_features = serializers.SerializerMethodField()
@@ -721,6 +960,7 @@ class AssetListSerializer(serializers.ModelSerializer):
             "model",
             "owner",
             "groups",
+            "location",
             "status",
             "notes",
             "metadata",
@@ -738,13 +978,20 @@ class AssetListSerializer(serializers.ModelSerializer):
         os_record = _get_primary_os(obj)
         if os_record is None:
             return None
-        return {"id": os_record.family_id, "name": os_record.family.name}
+        return {
+            "id": os_record.family_id,
+            "family": os_record.family.family,
+            "name": os_record.family.name,
+            "flavor": os_record.family.flavor,
+            "label": os_record.family.name_flavor,
+            "support_status": os_record.family.support_status,
+        }
 
     def get_os_version(self, obj):
         os_record = _get_primary_os(obj)
-        if os_record is None or os_record.version is None:
+        if os_record is None or not os_record.version:
             return None
-        return {"id": os_record.version_id, "version": os_record.version.version}
+        return {"version": os_record.version}
 
     def get_os_features(self, obj):
         os_record = _get_primary_os(obj)
@@ -758,7 +1005,7 @@ class AssetListSerializer(serializers.ModelSerializer):
         }
 
     def get_os_entries(self, obj):
-        entries = obj.os_entries.select_related("family", "version").order_by("-id")
+        entries = obj.os_entries.select_related("family").order_by("-id")
         return AssetOSNestedSerializer(entries, many=True).data
 
     def get_ports(self, obj):
@@ -768,6 +1015,16 @@ class AssetListSerializer(serializers.ModelSerializer):
     def get_unassigned_interfaces(self, obj):
         interfaces = obj.interfaces.filter(port__isnull=True).order_by("identifier", "id")
         return InterfaceNestedSerializer(interfaces, many=True).data
+
+    def get_location(self, obj):
+        if not obj.location_id:
+            return None
+        return {
+            "id": obj.location_id,
+            "name": obj.location.name,
+            "slug": obj.location.slug,
+            "path": obj.location.path_label,
+        }
 
 
 class BulkAssetRowSerializer(serializers.Serializer):
@@ -783,8 +1040,9 @@ class BulkAssetRowSerializer(serializers.Serializer):
         many=True,
         required=False,
     )
+    location = serializers.PrimaryKeyRelatedField(queryset=Location.objects.all(), required=False, allow_null=True)
     os_family = serializers.PrimaryKeyRelatedField(queryset=OSFamily.objects.all(), required=False, allow_null=True)
-    os_version = serializers.PrimaryKeyRelatedField(queryset=OSVersion.objects.all(), required=False, allow_null=True)
+    os_version = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
 
 class BulkInterfaceRowSerializer(serializers.Serializer):

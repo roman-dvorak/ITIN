@@ -44,6 +44,16 @@
         <div><dt class="font-semibold text-slate-700">Manufacturer</dt><dd>{{ asset.manufacturer|default:"-" }}</dd></div>
         <div><dt class="font-semibold text-slate-700">Model</dt><dd>{{ asset.model|default:"-" }}</dd></div>
         <div>
+          <dt class="font-semibold text-slate-700">Location</dt>
+          <dd>
+            {% if asset.location %}
+              <a href="{% url 'inventory:location-detail' asset.location.id asset.location.slug %}" class="hover:text-blue-700">{{ asset.location.path_label }}</a>
+            {% else %}
+              -
+            {% endif %}
+          </dd>
+        </div>
+        <div>
           <dt class="font-semibold text-slate-700">Description</dt>
           <dd class="mt-1 rounded border border-slate-200 bg-slate-50 p-3">
             {% if asset.notes %}
@@ -68,7 +78,7 @@
               <div class="space-y-1">
                 {% for os in asset.os_entries.all %}
                   <div class="rounded border border-slate-200 bg-slate-50 px-2 py-1">
-                    <div>{{ os.family.name }}{% if os.version %} {{ os.version.version }}{% endif %}</div>
+                    <div>{{ os.family.name_flavor }}{% if os.version %} {{ os.version }}{% endif %}</div>
                     <div class="text-xs text-slate-600">
                       {% if os.patch_level %}Patch: {{ os.patch_level }} | {% endif %}
                       Support: {{ os.get_support_state_display }} | Auto updates: {% if os.auto_updates_enabled %}On{% else %}Off{% endif %}

@@ -16,6 +16,8 @@ def _resolve_vlan_for_interface(interface: NetworkInterface):
 
 
 def _resolve_vlan_for_guest(guest: GuestDevice):
+    if guest.network_id and guest.network and guest.network.vlan_id is not None:
+        return guest.network.vlan_id
     group = guest.groups.filter(default_vlan_id__isnull=False).order_by("id").first()
     return group.default_vlan_id if group else None
 
@@ -54,15 +56,21 @@ def build_dhcp_payload():
         )
 
     now = timezone.now()
-    guests = GuestDevice.objects.filter(
+    guests = GuestDevice.objects.select_related("network", "sponsor").filter(
         enabled=True,
+        approval_status=GuestDevice.ApprovalStatus.APPROVED,
         valid_from__lte=now,
         valid_until__gte=now,
     )
     guest_entries = [
         {
             "guest_id": guest.id,
+            "device_name": guest.device_name,
+            "owner_name": guest.owner_name,
+            "owner_email": guest.owner_email,
+            "responsible_email": guest.sponsor.email,
             "mac_address": guest.mac_address,
+            "network": guest.network.name if guest.network_id else None,
             "description": guest.description,
             "valid_from": guest.valid_from.isoformat(),
             "valid_until": guest.valid_until.isoformat(),
@@ -94,8 +102,9 @@ def build_radius_lines():
         lines.append(line)
 
     now = timezone.now()
-    guests = GuestDevice.objects.prefetch_related("groups").filter(
+    guests = GuestDevice.objects.select_related("network").prefetch_related("groups").filter(
         enabled=True,
+        approval_status=GuestDevice.ApprovalStatus.APPROVED,
         valid_from__lte=now,
         valid_until__gte=now,
     )

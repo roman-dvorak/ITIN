@@ -82,22 +82,23 @@ OS_FAMILY_PATTERNS = [
 
 # OS family metadata
 OS_FAMILY_METADATA = {
-    'Windows XP': {'vendor': 'Microsoft', 'platform_type': 'DESKTOP', 'supports_domain_join': True},
-    'Windows Vista': {'vendor': 'Microsoft', 'platform_type': 'DESKTOP', 'supports_domain_join': True},
-    'Windows Embedded': {'vendor': 'Microsoft', 'platform_type': 'DESKTOP', 'supports_domain_join': False},
-    'Windows 10 IoT': {'vendor': 'Microsoft', 'platform_type': 'DESKTOP', 'supports_domain_join': False},
-    'Windows Server 2003': {'vendor': 'Microsoft', 'platform_type': 'SERVER', 'supports_domain_join': True},
-    'CentOS': {'vendor': 'Red Hat', 'platform_type': 'SERVER', 'supports_domain_join': False},
-    'Scientific Linux': {'vendor': 'Fermilab/CERN', 'platform_type': 'SERVER', 'supports_domain_join': False},
-    'Linux Mint': {'vendor': 'Linux Mint', 'platform_type': 'DESKTOP', 'supports_domain_join': False},
-    'Raspbian': {'vendor': 'Raspberry Pi Foundation', 'platform_type': 'OTHER', 'supports_domain_join': False},
-    'OpenWRT': {'vendor': 'OpenWrt Project', 'platform_type': 'OTHER', 'supports_domain_join': False},
-    'RouterOS': {'vendor': 'MikroTik', 'platform_type': 'OTHER', 'supports_domain_join': False},
-    'Synology DSM': {'vendor': 'Synology', 'platform_type': 'OTHER', 'supports_domain_join': False},
-    'QNAP QTS': {'vendor': 'QNAP', 'platform_type': 'OTHER', 'supports_domain_join': False},
-    'OPNsense': {'vendor': 'Deciso', 'platform_type': 'OTHER', 'supports_domain_join': False},
-    'Cisco IOS': {'vendor': 'Cisco', 'platform_type': 'OTHER', 'supports_domain_join': False},
-    'Linux': {'vendor': '', 'platform_type': 'SERVER', 'supports_domain_join': False},
+    'Windows XP': {'family': OSFamily.FamilyType.WINDOWS},
+    'Windows Vista': {'family': OSFamily.FamilyType.WINDOWS},
+    'Windows Embedded': {'family': OSFamily.FamilyType.WINDOWS},
+    'Windows 10 IoT': {'family': OSFamily.FamilyType.WINDOWS},
+    'Windows Server 2003': {'family': OSFamily.FamilyType.WINDOWS},
+    'CentOS': {'family': OSFamily.FamilyType.LINUX},
+    'Scientific Linux': {'family': OSFamily.FamilyType.LINUX},
+    'Linux Mint': {'family': OSFamily.FamilyType.LINUX},
+    'Raspbian': {'family': OSFamily.FamilyType.LINUX},
+    'OpenWRT': {'family': OSFamily.FamilyType.NETWORK_OS},
+    'RouterOS': {'family': OSFamily.FamilyType.NETWORK_OS},
+    'Synology DSM': {'family': OSFamily.FamilyType.NAS_OS},
+    'QNAP QTS': {'family': OSFamily.FamilyType.NAS_OS},
+    'OPNsense': {'family': OSFamily.FamilyType.NETWORK_OS},
+    'Cisco IOS': {'family': OSFamily.FamilyType.NETWORK_OS},
+    'Android': {'family': OSFamily.FamilyType.ANDROID},
+    'Linux': {'family': OSFamily.FamilyType.LINUX},
 }
 
 
@@ -202,16 +203,12 @@ class Command(BaseCommand):
                 self.stdout.write(f'  OS Family exists: {os_name}')
             else:
                 metadata = OS_FAMILY_METADATA.get(os_name, {
-                    'vendor': '',
-                    'platform_type': 'OTHER',
-                    'supports_domain_join': False,
+                    'family': OSFamily.FamilyType.OTHER,
                 })
                 if not dry_run:
                     family = OSFamily.objects.create(
+                        family=metadata['family'],
                         name=os_name,
-                        vendor=metadata['vendor'],
-                        platform_type=metadata['platform_type'],
-                        supports_domain_join=metadata['supports_domain_join'],
                     )
                     os_family_map[os_name] = family
                 self.stdout.write(self.style.SUCCESS(f'  Created OS Family: {os_name}'))
@@ -322,11 +319,11 @@ class Command(BaseCommand):
             os_family = os_family_map[os_family_name]
             existing_os = AssetOS.objects.filter(asset=asset, family=os_family).order_by("-id").first()
             if existing_os:
-                if existing_os.version_id is not None:
-                    existing_os.version = None
+                if existing_os.version:
+                    existing_os.version = ""
                     existing_os.save(update_fields=["version"])
             else:
-                AssetOS.objects.create(asset=asset, family=os_family, version=None)
+                AssetOS.objects.create(asset=asset, family=os_family, version="")
 
         # Add MAC addresses as interfaces
         mac1_norm = normalize_mac(mac1)

@@ -8,11 +8,11 @@ from .models import (
     AssetOS,
     GuestDevice,
     IPAddress,
+    Location,
     Network,
     NetworkInterface,
     OrganizationalGroup,
     OSFamily,
-    OSVersion,
     Port,
 )
 
@@ -49,9 +49,10 @@ class AssetOSInline(admin.StackedInline):
 
 @admin.register(Asset)
 class AssetAdmin(admin.ModelAdmin):
-    list_display = ("name", "asset_type", "status", "owner")
-    list_filter = ("asset_type", "status")
+    list_display = ("name", "asset_type", "status", "owner", "location")
+    list_filter = ("asset_type", "status", "location")
     search_fields = ("name", "asset_tag", "serial_number")
+    autocomplete_fields = ("owner", "location")
     filter_horizontal = ("groups",)
     inlines = [AssetOSInline]
 
@@ -61,16 +62,13 @@ class AssetAdmin(admin.ModelAdmin):
 
 @admin.register(OSFamily)
 class OSFamilyAdmin(admin.ModelAdmin):
-    list_display = ("name", "vendor", "platform_type", "supports_domain_join")
-    list_filter = ("platform_type", "supports_domain_join")
-    search_fields = ("name", "vendor")
+    list_display = ("name_flavor", "family", "support_status", "name", "flavor")
+    list_filter = ("family", "support_status")
+    search_fields = ("name", "flavor")
 
-
-@admin.register(OSVersion)
-class OSVersionAdmin(admin.ModelAdmin):
-    list_display = ("family", "version", "codename", "is_lts", "end_of_support_date")
-    list_filter = ("family", "is_lts")
-    search_fields = ("version", "codename", "kernel_version")
+    @admin.display(description="Name - Flavor")
+    def name_flavor(self, obj):
+        return obj.name_flavor
 
 
 @admin.register(Network)
@@ -78,6 +76,20 @@ class NetworkAdmin(admin.ModelAdmin):
     list_display = ("name", "cidr", "vlan_id", "dhcp_enabled")
     list_filter = ("dhcp_enabled",)
     search_fields = ("name", "cidr")
+
+
+@admin.register(Location)
+class LocationAdmin(admin.ModelAdmin):
+    list_display = ("path_label", "name", "slug", "parent", "updated_at")
+    list_filter = ("groups",)
+    search_fields = ("name", "slug", "path_cache", "parent__name")
+    filter_horizontal = ("groups",)
+    prepopulated_fields = {"slug": ("name",)}
+    ordering = ("path_cache", "id")
+
+    @admin.display(description="Path", ordering="path_cache")
+    def path_label(self, obj):
+        return obj.path_label
 
 
 @admin.register(NetworkInterface)
@@ -103,7 +115,17 @@ class PortAdmin(admin.ModelAdmin):
 
 @admin.register(GuestDevice)
 class GuestDeviceAdmin(admin.ModelAdmin):
-    list_display = ("mac_address", "sponsor", "valid_from", "valid_until", "enabled")
-    list_filter = ("enabled",)
-    search_fields = ("mac_address", "description", "sponsor__email")
+    list_display = (
+        "device_name",
+        "mac_address",
+        "owner_email",
+        "network",
+        "sponsor",
+        "approval_status",
+        "valid_until",
+        "enabled",
+    )
+    list_filter = ("approval_status", "enabled", "network")
+    search_fields = ("device_name", "owner_name", "owner_email", "mac_address", "description", "sponsor__email")
+    autocomplete_fields = ("sponsor", "approved_by", "network")
     filter_horizontal = ("groups",)

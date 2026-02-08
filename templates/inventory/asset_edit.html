@@ -45,7 +45,7 @@
             {% csrf_token %}
             <div class="grid grid-cols-1 gap-2 md:grid-cols-3">
               <div>
-                <label for="{{ row.form.family.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Family</label>
+                <label for="{{ row.form.family.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">OS</label>
                 {{ row.form.family }}
               </div>
               <div>
@@ -87,7 +87,7 @@
           {% csrf_token %}
           <div class="grid grid-cols-1 gap-2 md:grid-cols-3">
             <div>
-              <label for="{{ os_form.family.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Family</label>
+              <label for="{{ os_form.family.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">OS</label>
               {{ os_form.family }}
               {% if os_form.family.errors %}<p class="mt-1 text-xs text-red-600">{{ os_form.family.errors|join:", " }}</p>{% endif %}
             </div>

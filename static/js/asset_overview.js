@@ -16,7 +16,7 @@
       status: item.status || "ACTIVE",
       groupIds: item.groups ? item.groups.map(function (group) { return String(group.id); }) : [],
       osFamilyId: item.os_family ? String(item.os_family.id) : "",
-      osVersionId: item.os_version ? String(item.os_version.id) : "",
+      osVersion: item.os_version ? String(item.os_version.version || "") : "",
       ports: item.ports || [],
       unassignedInterfaces: item.unassigned_interfaces || [],
     };
@@ -103,7 +103,6 @@
       users: [],
       groups: [],
       osFamilies: [],
-      osVersions: [],
       networks: [],
       ports: [],
     });
@@ -113,17 +112,6 @@
     const [bulkTextInterface, setBulkTextInterface] = React.useState("");
     const [bulkInfoInterface, setBulkInfoInterface] = React.useState("");
     const [globalError, setGlobalError] = React.useState("");
-
-    const versionsByFamily = React.useMemo(function () {
-      return lookups.osVersions.reduce(function (acc, version) {
-        const key = String(version.family_id);
-        if (!acc[key]) {
-          acc[key] = [];
-        }
-        acc[key].push(version);
-        return acc;
-      }, {});
-    }, [lookups.osVersions]);
 
     const portsByAsset = React.useMemo(function () {
       return lookups.ports.reduce(function (acc, port) {
@@ -181,9 +169,6 @@
         fetch(config.apiBaseUrl + "/os-families/?q=", { credentials: "same-origin" }).then(function (response) {
           return response.json();
         }),
-        fetch(config.apiBaseUrl + "/os-versions/?q=", { credentials: "same-origin" }).then(function (response) {
-          return response.json();
-        }),
         fetch(config.apiBaseUrl + "/networks/?q=", { credentials: "same-origin" }).then(function (response) {
           return response.json();
         }),
@@ -195,9 +180,8 @@
           users: results[0] || [],
           groups: results[1] || [],
           osFamilies: results[2] || [],
-          osVersions: results[3] || [],
-          networks: results[4] || [],
-          ports: results[5] || [],
+          networks: results[3] || [],
+          ports: results[4] || [],
         });
       });
     }, []);
@@ -343,7 +327,7 @@
           return Number(id);
         }),
         os_family: row.osFamilyId ? Number(row.osFamilyId) : null,
-        os_version: row.osVersionId ? Number(row.osVersionId) : null,
+        os_version: row.osVersion || "",
       };
 
       fetch(config.apiBaseUrl + "/assets/" + rowId + "/", {
@@ -498,7 +482,7 @@
             row.os_family = Number(values[3]);
           }
           if (values[4]) {
-            row.os_version = Number(values[4]);
+            row.os_version = values[4];
           }
           if (values[5]) {
             row.groups = values[5]
@@ -777,7 +761,7 @@
               element(
                 "p",
                 { className: "mb-2 text-xs text-slate-500" },
-                "Format: id, owner_id, status, os_family_id, os_version_id, group_ids(comma) (TAB-separated)."
+                "Format: id, owner_id, status, os_family_id, os_version_text, group_ids(comma) (TAB-separated)."
               ),
               element("textarea", {
                 className: "mb-2 h-24 w-full rounded border border-slate-300 p-2 text-xs",
@@ -785,7 +769,7 @@
                 onChange: function (event) {
                   setBulkTextAsset(event.target.value);
                 },
-                placeholder: "1\t3\tACTIVE\t1\t2\t1,2",
+                placeholder: "1\t3\tACTIVE\t1\t23H2\t1,2",
               }),
               element(
                 "div",
@@ -830,7 +814,6 @@
               assetRows.map(function (row) {
                 const rowError = assetErrors[row.id];
                 const hasError = !!rowError;
-                const familyVersions = versionsByFamily[row.osFamilyId] || [];
                 const saving = savingAssetIds.indexOf(row.id) !== -1;
                 const isExpanded = !!expandedAssets[row.id];
 
@@ -946,7 +929,6 @@
                                 }
                                 return Object.assign({}, currentRow, {
                                   osFamilyId: familyId,
-                                  osVersionId: "",
                                 });
                               });
                             });
@@ -954,7 +936,7 @@
                         },
                         [element("option", { key: "empty", value: "" }, "None")].concat(
                           renderSelectOptions(lookups.osFamilies, "id", function (item) {
-                            return item.name;
+                            return item.label || item.name;
                           })
                         )
                       )
@@ -962,25 +944,18 @@
                     element(
                       "td",
                       { className: "px-3 py-2" },
-                      element(
-                        "select",
-                        {
-                          className: cellClass(hasError),
-                          value: row.osVersionId,
-                          disabled: !config.canEdit || !row.osFamilyId,
-                          onKeyDown: function (event) {
-                            handleAssetCellKeyDown(event, row.id);
-                          },
-                          onChange: function (event) {
-                            setAssetValue(row.id, "osVersionId", event.target.value);
-                          },
+                      element("input", {
+                        className: cellClass(hasError) + " min-w-24",
+                        value: row.osVersion,
+                        disabled: !config.canEdit || !row.osFamilyId,
+                        onKeyDown: function (event) {
+                          handleAssetCellKeyDown(event, row.id);
                         },
-                        [element("option", { key: "empty", value: "" }, "None")].concat(
-                          renderSelectOptions(familyVersions, "id", function (item) {
-                            return item.version;
-                          })
-                        )
-                      )
+                        onChange: function (event) {
+                          setAssetValue(row.id, "osVersion", event.target.value);
+                        },
+                        placeholder: "23H2 / 22.04",
+                      })
                     ),
                     element(
                       "td",

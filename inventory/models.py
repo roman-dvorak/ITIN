@@ -10,6 +10,7 @@ from django.db.models import Q
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.urls import reverse
+from django.utils.text import slugify
 from django.utils import timezone
 
 MAC_ADDRESS_RE = re.compile(r"^([0-9a-fA-F]{2}[:-]){5}([0-9a-fA-F]{2})$")
@@ -49,6 +50,103 @@ class OrganizationalGroup(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+
+class Location(TimeStampedModel):
+    name = models.CharField(max_length=200)
+    slug = models.SlugField(max_length=220)
+    path_cache = models.CharField(max_length=2000, blank=True, default="", db_index=True)
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="children",
+    )
+    description = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    groups = models.ManyToManyField(OrganizationalGroup, related_name="locations", blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["parent", "name"], name="uniq_location_name_per_parent"),
+            models.UniqueConstraint(fields=["parent", "slug"], name="uniq_location_slug_per_parent"),
+        ]
+        ordering = ("name", "id")
+
+    def clean(self):
+        if not self.slug:
+            self.slug = slugify(self.name)
+        if not self.slug:
+            raise ValidationError({"slug": "Slug cannot be empty."})
+        if self.parent_id and self.parent_id == self.id:
+            raise ValidationError({"parent": "Location cannot be parent of itself."})
+
+        current = self.parent
+        while current:
+            if self.id and current.id == self.id:
+                raise ValidationError({"parent": "Location hierarchy cannot contain cycles."})
+            current = current.parent
+
+    def ancestor_chain(self):
+        chain = []
+        current = self
+        while current:
+            chain.append(current)
+            current = current.parent
+        return list(reversed(chain))
+
+    def _compute_path_cache(self):
+        if not self.parent_id:
+            return self.slug
+        parent_path = (
+            Location.objects.filter(pk=self.parent_id).values_list("path_cache", flat=True).first() or ""
+        )
+        if parent_path:
+            return f"{parent_path}/{self.slug}"
+        parent = Location.objects.select_related("parent").get(pk=self.parent_id)
+        return f"{parent.path}/{self.slug}"
+
+    def _rebuild_descendant_paths(self):
+        children = list(Location.objects.filter(parent_id=self.id).only("id", "slug", "path_cache"))
+        for child in children:
+            new_path = f"{self.path_cache}/{child.slug}" if self.path_cache else child.slug
+            if child.path_cache != new_path:
+                Location.objects.filter(pk=child.id).update(path_cache=new_path)
+                child.path_cache = new_path
+            child._rebuild_descendant_paths()
+
+    @property
+    def path(self):
+        if self.path_cache:
+            return self.path_cache
+        return "/".join(item.slug for item in self.ancestor_chain())
+
+    @property
+    def path_label(self):
+        return self.path
+
+    def save(self, *args, **kwargs):
+        old_parent_id = None
+        old_slug = None
+        if self.pk:
+            old_parent_id, old_slug = (
+                Location.objects.filter(pk=self.pk).values_list("parent_id", "slug").first() or (None, None)
+            )
+        super().save(*args, **kwargs)
+        new_path = self._compute_path_cache()
+        path_changed = new_path != self.path_cache
+        if path_changed:
+            Location.objects.filter(pk=self.pk).update(path_cache=new_path)
+            self.path_cache = new_path
+        if path_changed or old_parent_id != self.parent_id or old_slug != self.slug:
+            self._rebuild_descendant_paths()
+
+    def get_absolute_url(self):
+        return reverse("inventory:location-detail", args=[self.pk, self.slug])
+
+    def __str__(self) -> str:
+        return self.path_label
 
 
 class AssetQuerySet(models.QuerySet):
@@ -106,6 +204,13 @@ class Asset(TimeStampedModel):
         blank=True,
     )
     groups = models.ManyToManyField(OrganizationalGroup, related_name="assets", blank=True)
+    location = models.ForeignKey(
+        Location,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assets",
+    )
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
     notes = models.TextField(blank=True)
     metadata = models.JSONField(default=dict, blank=True)
@@ -124,45 +229,46 @@ class Asset(TimeStampedModel):
         if hasattr(self, "_prefetched_objects_cache") and "os_entries" in self._prefetched_objects_cache:
             entries = self._prefetched_objects_cache["os_entries"]
             return entries[0] if entries else None
-        return self.os_entries.select_related("family", "version").order_by("-id").first()
+        return self.os_entries.select_related("family").order_by("-id").first()
 
 
 class OSFamily(models.Model):
-    class PlatformType(models.TextChoices):
-        DESKTOP = "DESKTOP", "Desktop"
-        SERVER = "SERVER", "Server"
-        MOBILE = "MOBILE", "Mobile"
-        OTHER = "OTHER", "Other"
+    class FamilyType(models.TextChoices):
+        LINUX = "linux", "Linux"
+        WINDOWS = "windows", "Windows"
+        NAS_OS = "nas-os", "NAS OS"
+        NETWORK_OS = "network-os", "Network OS"
+        ANDROID = "android", "Android"
+        MACOS = "macos", "macOS"
+        OTHER = "other", "Other"
 
-    name = models.CharField(max_length=120, unique=True)
-    vendor = models.CharField(max_length=120, blank=True)
-    platform_type = models.CharField(
+    class SupportStatus(models.TextChoices):
+        SUPPORTED = "SUPPORTED", "Supported"
+        UNSUPPORTED = "UNSUPPORTED", "Unsupported"
+
+    family = models.CharField(max_length=20, choices=FamilyType.choices, default=FamilyType.OTHER)
+    name = models.CharField(max_length=120)
+    flavor = models.CharField(max_length=120, blank=True, null=True)
+    support_status = models.CharField(
         max_length=20,
-        choices=PlatformType.choices,
-        default=PlatformType.DESKTOP,
+        choices=SupportStatus.choices,
+        default=SupportStatus.SUPPORTED,
     )
-    supports_domain_join = models.BooleanField(default=False)
-
-    def __str__(self) -> str:
-        return self.name
-
-
-class OSVersion(models.Model):
-    family = models.ForeignKey(OSFamily, on_delete=models.CASCADE, related_name="versions")
-    version = models.CharField(max_length=100)
-    codename = models.CharField(max_length=120, blank=True)
-    release_date = models.DateField(null=True, blank=True)
-    end_of_support_date = models.DateField(null=True, blank=True)
-    is_lts = models.BooleanField(default=False)
-    kernel_version = models.CharField(max_length=120, blank=True)
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["family", "version"], name="uniq_os_family_version")
+            models.UniqueConstraint(fields=["family", "name", "flavor"], name="uniq_os_catalog_item"),
         ]
+        ordering = ("family", "name", "flavor", "id")
+
+    @property
+    def name_flavor(self) -> str:
+        if self.flavor:
+            return f"{self.name} - {self.flavor}"
+        return self.name
 
     def __str__(self) -> str:
-        return f"{self.family.name} {self.version}"
+        return f"{self.get_family_display()} / {self.name_flavor}"
 
 
 class AssetOS(models.Model):
@@ -174,7 +280,7 @@ class AssetOS(models.Model):
 
     asset = models.ForeignKey(Asset, on_delete=models.CASCADE, related_name="os_entries")
     family = models.ForeignKey(OSFamily, on_delete=models.PROTECT)
-    version = models.ForeignKey(OSVersion, on_delete=models.PROTECT, null=True, blank=True)
+    version = models.CharField(max_length=120, blank=True)
     patch_level = models.CharField(max_length=120, blank=True)
     installed_on = models.DateField(null=True, blank=True)
     support_state = models.CharField(
@@ -187,14 +293,10 @@ class AssetOS(models.Model):
     class Meta:
         ordering = ("-id",)
 
-    def clean(self):
-        if self.version and self.version.family_id != self.family_id:
-            raise ValidationError({"version": "Selected OS version must belong to selected family."})
-
     def __str__(self) -> str:
         if self.version:
-            return f"{self.family.name} {self.version.version}"
-        return self.family.name
+            return f"{self.family.name_flavor} {self.version}"
+        return self.family.name_flavor
 
 
 class Network(models.Model):
@@ -345,7 +447,23 @@ class Port(TimeStampedModel):
 
 
 class GuestDevice(TimeStampedModel):
+    class ApprovalStatus(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        APPROVED = "APPROVED", "Approved"
+        REJECTED = "REJECTED", "Rejected"
+        DISABLED = "DISABLED", "Disabled"
+
+    device_name = models.CharField(max_length=200, blank=True)
+    owner_name = models.CharField(max_length=200, blank=True)
+    owner_email = models.EmailField(blank=True)
     description = models.TextField(blank=True)
+    network = models.ForeignKey(
+        "Network",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="guest_access_devices",
+    )
     sponsor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -355,6 +473,20 @@ class GuestDevice(TimeStampedModel):
     mac_address = models.CharField(max_length=17, validators=[validate_mac])
     valid_from = models.DateTimeField(default=timezone.now)
     valid_until = models.DateTimeField()
+    approval_status = models.CharField(
+        max_length=20,
+        choices=ApprovalStatus.choices,
+        default=ApprovalStatus.APPROVED,
+    )
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_guest_devices",
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejected_reason = models.TextField(blank=True)
     enabled = models.BooleanField(default=True)
 
     def clean(self):
@@ -363,6 +495,8 @@ class GuestDevice(TimeStampedModel):
             raise ValidationError({"valid_until": "valid_until must be later than valid_from."})
 
     def __str__(self) -> str:
+        if self.device_name:
+            return f"{self.device_name} ({self.mac_address})"
         return self.mac_address
 
 

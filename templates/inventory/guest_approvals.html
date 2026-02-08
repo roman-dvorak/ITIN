@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Guest Approvals | IT Asset Tracker{% endblock %}
+
+{% block content %}
+  <div class="mb-6 flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-semibold">Guest Approvals</h1>
+      <p class="text-sm text-slate-600">
+        {% if is_superuser %}
+          All guest approval requests.
+        {% else %}
+          Requests assigned to you as responsible person.
+        {% endif %}
+      </p>
+    </div>
+    <div class="rounded border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+      Active approved: <span class="font-semibold">{{ active_count }}</span>
+    </div>
+  </div>
+
+  <section class="mb-6 rounded-lg border border-slate-200 bg-white p-4">
+    <h2 class="mb-3 text-lg font-medium">Pending Requests</h2>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-200 text-sm">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="px-3 py-2 text-left font-medium text-slate-600">Device</th>
+            <th class="px-3 py-2 text-left font-medium text-slate-600">MAC</th>
+            <th class="px-3 py-2 text-left font-medium text-slate-600">Owner</th>
+            <th class="px-3 py-2 text-left font-medium text-slate-600">Network</th>
+            <th class="px-3 py-2 text-left font-medium text-slate-600">Valid Until</th>
+            <th class="px-3 py-2 text-left font-medium text-slate-600">Action</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-200">
+          {% for guest in pending_requests %}
+            <tr>
+              <td class="px-3 py-2">{{ guest.device_name|default:"-" }}</td>
+              <td class="px-3 py-2 font-mono text-xs">{{ guest.mac_address }}</td>
+              <td class="px-3 py-2">
+                <div>{{ guest.owner_name|default:"-" }}</div>
+                <div class="text-xs text-slate-500">{{ guest.owner_email|default:"-" }}</div>
+              </td>
+              <td class="px-3 py-2">{{ guest.network.name|default:"-" }}</td>
+              <td class="px-3 py-2">{{ guest.valid_until }}</td>
+              <td class="px-3 py-2">
+                <div class="flex items-center gap-2">
+                  <form method="post" action="{% url 'inventory:guest-approve' guest.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="inline-flex h-8 items-center rounded border border-emerald-300 bg-emerald-50 px-3 text-xs font-medium text-emerald-800 hover:bg-emerald-100">Approve</button>
+                  </form>
+                  <form method="post" action="{% url 'inventory:guest-reject' guest.id %}" class="flex items-center gap-1">
+                    {% csrf_token %}
+                    <input name="reason" placeholder="reason" class="h-8 w-28 rounded border border-slate-300 px-2 text-xs">
+                    <button type="submit" class="inline-flex h-8 items-center rounded border border-amber-300 bg-amber-50 px-3 text-xs font-medium text-amber-800 hover:bg-amber-100">Reject</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6" class="px-3 py-2 text-slate-500">No pending requests.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="rounded-lg border border-slate-200 bg-white p-4">
+    <h2 class="mb-3 text-lg font-medium">Recent Requests</h2>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-200 text-sm">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="px-3 py-2 text-left font-medium text-slate-600">Device</th>
+            <th class="px-3 py-2 text-left font-medium text-slate-600">MAC</th>
+            <th class="px-3 py-2 text-left font-medium text-slate-600">Network</th>
+            <th class="px-3 py-2 text-left font-medium text-slate-600">Responsible</th>
+            <th class="px-3 py-2 text-left font-medium text-slate-600">Status</th>
+            <th class="px-3 py-2 text-left font-medium text-slate-600">Validity</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-200">
+          {% for guest in recent_requests %}
+            <tr>
+              <td class="px-3 py-2">{{ guest.device_name|default:"-" }}</td>
+              <td class="px-3 py-2 font-mono text-xs">{{ guest.mac_address }}</td>
+              <td class="px-3 py-2">{{ guest.network.name|default:"-" }}</td>
+              <td class="px-3 py-2">{{ guest.sponsor.email }}</td>
+              <td class="px-3 py-2">
+                <span class="rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">{{ guest.get_approval_status_display }}</span>
+              </td>
+              <td class="px-3 py-2">
+                {% if guest.valid_until < now %}
+                  <span class="text-amber-700">Expired</span>
+                {% elif guest.enabled and guest.approval_status == 'APPROVED' %}
+                  <span class="text-emerald-700">Active</span>
+                {% else %}
+                  <span class="text-slate-600">Inactive</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6" class="px-3 py-2 text-slate-500">No requests available.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

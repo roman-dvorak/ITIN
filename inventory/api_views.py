@@ -2,16 +2,33 @@ from django.contrib.auth import authenticate, login
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Q
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework.authtoken.models import Token
-from rest_framework import mixins, status, viewsets
+from rest_framework import mixins, serializers, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .access import can_edit_asset, visible_assets_for_user
-from .models import Asset, Network, NetworkInterface, OrganizationalGroup, OSFamily, OSVersion, Port
+from .access import (
+    can_edit_asset,
+    visible_assets_for_user,
+    visible_location_ids_for_user,
+    visible_locations_for_user,
+)
+from .models import (
+    Asset,
+    GuestDevice,
+    Location,
+    Network,
+    NetworkInterface,
+    OrganizationalGroup,
+    OSFamily,
+    Port,
+)
 from .permissions import AssetObjectPermission
 from .serializers import (
     ApiLoginSerializer,
@@ -21,15 +38,20 @@ from .serializers import (
     AssetUpdateSerializer,
     BulkAssetRowSerializer,
     BulkInterfaceRowSerializer,
+    GuestApprovalDecisionSerializer,
+    GuestDeviceSerializer,
+    GuestSelfRegistrationSerializer,
     GroupCreateSerializer,
     GroupLookupSerializer,
+    LocationDetailSerializer,
+    LocationLookupSerializer,
+    LocationWriteSerializer,
     NetworkInterfaceCreateSerializer,
     NetworkInterfaceListSerializer,
     NetworkInterfaceUpdateSerializer,
     NetworkLookupSerializer,
     OSFamilyCreateSerializer,
     OSFamilyLookupSerializer,
-    OSVersionLookupSerializer,
     PortCreateSerializer,
     PortLookupSerializer,
     PortUpdateSerializer,
@@ -95,11 +117,10 @@ class AssetViewSet(
         user = self.request.user
         queryset = (
             visible_assets_for_user(user)
-            .select_related("owner")
+            .select_related("owner", "location", "location__parent")
             .prefetch_related(
                 "groups",
                 "os_entries__family",
-                "os_entries__version",
                 "ports__port_interfaces__ip_addresses__network",
                 "interfaces__ip_addresses__network",
             )
@@ -116,6 +137,8 @@ class AssetViewSet(
             queryset = queryset.filter(groups__id=params["group"])
         if params.get("owner"):
             queryset = queryset.filter(owner_id=params["owner"])
+        if params.get("location"):
+            queryset = queryset.filter(location_id=params["location"])
         if params.get("status"):
             queryset = queryset.filter(status=params["status"])
         if params.get("type"):
@@ -136,6 +159,103 @@ class AssetViewSet(
         asset = self.get_object()
         if not can_edit_asset(self.request.user, asset):
             raise PermissionDenied("You do not have permission to edit this asset.")
+        serializer.save()
+
+
+def _build_location_tree_payload(location_queryset):
+    locations = list(location_queryset.select_related("parent").order_by("name", "id"))
+    nodes = {
+        location.id: {
+            "id": location.id,
+            "name": location.name,
+            "slug": location.slug,
+            "parent": location.parent_id,
+            "path": location.path_label,
+            "children": [],
+        }
+        for location in locations
+    }
+    roots = []
+    for location in locations:
+        node = nodes[location.id]
+        if location.parent_id and location.parent_id in nodes:
+            nodes[location.parent_id]["children"].append(node)
+        else:
+            roots.append(node)
+    return roots
+
+
+class LocationViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = visible_locations_for_user(self.request.user).prefetch_related("groups").order_by("name", "id")
+        parent = self.request.query_params.get("parent")
+        if parent == "null":
+            queryset = queryset.filter(parent__isnull=True)
+        elif parent and parent.isdigit():
+            queryset = queryset.filter(parent_id=int(parent))
+        return queryset
+
+    def get_serializer_class(self):
+        if self.action in ("create", "update", "partial_update"):
+            return LocationWriteSerializer
+        if self.action == "retrieve":
+            return LocationDetailSerializer
+        return LocationLookupSerializer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["visible_location_ids"] = visible_location_ids_for_user(self.request.user)
+        return context
+
+    @action(detail=False, methods=["get"], url_path="tree")
+    def tree(self, request):
+        tree_payload = _build_location_tree_payload(self.get_queryset())
+        return Response(tree_payload)
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        groups = serializer.validated_data.get("groups", [])
+        parent = serializer.validated_data.get("parent")
+        if user.is_superuser:
+            serializer.save()
+            return
+
+        admin_group_ids = set(user.asset_admin_groups.values_list("id", flat=True))
+        if not groups:
+            raise PermissionDenied("At least one group is required.")
+        if any(group.id not in admin_group_ids for group in groups):
+            raise PermissionDenied("Location groups are outside your managed groups.")
+        if parent and parent.id not in visible_location_ids_for_user(user):
+            raise PermissionDenied("Parent location is outside your visible tree.")
+        serializer.save()
+
+    def perform_update(self, serializer):
+        user = self.request.user
+        location = self.get_object()
+        if user.is_superuser:
+            serializer.save()
+            return
+
+        admin_group_ids = set(user.asset_admin_groups.values_list("id", flat=True))
+        existing_group_ids = set(location.groups.values_list("id", flat=True))
+        groups = serializer.validated_data.get("groups", serializers.empty)
+        effective_group_ids = set(group.id for group in groups) if groups is not serializers.empty else existing_group_ids
+        if not effective_group_ids:
+            raise PermissionDenied("At least one group is required.")
+        if any(group_id not in admin_group_ids for group_id in effective_group_ids):
+            raise PermissionDenied("Location groups are outside your managed groups.")
+
+        parent = serializer.validated_data.get("parent", location.parent)
+        if parent and parent.id not in visible_location_ids_for_user(user):
+            raise PermissionDenied("Parent location is outside your visible tree.")
         serializer.save()
 
 
@@ -489,10 +609,16 @@ class OSFamilyLookupAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        queryset = OSFamily.objects.all().order_by("name")
+        queryset = OSFamily.objects.all().order_by("family", "name", "flavor", "id")
+        family = request.query_params.get("family")
+        if family:
+            queryset = queryset.filter(family=family)
+        support_status = request.query_params.get("support_status")
+        if support_status:
+            queryset = queryset.filter(support_status=support_status)
         q = request.query_params.get("q")
         if q:
-            queryset = queryset.filter(name__icontains=q)
+            queryset = queryset.filter(Q(name__icontains=q) | Q(flavor__icontains=q))
         serializer = OSFamilyLookupSerializer(queryset[:50], many=True)
         return Response(serializer.data)
 
@@ -509,15 +635,8 @@ class OSVersionLookupAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        queryset = OSVersion.objects.select_related("family").order_by("family__name", "version")
-        family_id = request.query_params.get("family_id")
-        if family_id:
-            queryset = queryset.filter(family_id=family_id)
-        q = request.query_params.get("q")
-        if q:
-            queryset = queryset.filter(version__icontains=q)
-        serializer = OSVersionLookupSerializer(queryset[:50], many=True)
-        return Response(serializer.data)
+        # Legacy endpoint kept for backward compatibility after moving to free-text AssetOS.version.
+        return Response([])
 
 
 class NetworkLookupAPIView(APIView):
@@ -530,3 +649,96 @@ class NetworkLookupAPIView(APIView):
             queryset = queryset.filter(Q(name__icontains=q) | Q(cidr__icontains=q))
         serializer = NetworkLookupSerializer(queryset[:50], many=True)
         return Response(serializer.data)
+
+
+class GuestSelfRegistrationAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        request=GuestSelfRegistrationSerializer,
+        responses={201: GuestDeviceSerializer},
+        description=(
+            "Create guest network-access request. "
+            "Request is created in PENDING state and must be approved by responsible system user."
+        ),
+    )
+    def post(self, request):
+        serializer = GuestSelfRegistrationSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        guest = serializer.save()
+        return Response(GuestDeviceSerializer(guest).data, status=status.HTTP_201_CREATED)
+
+
+class GuestPendingApprovalAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        responses={200: GuestDeviceSerializer(many=True)},
+        description="List pending guest requests assigned to current user (or all pending for superuser).",
+    )
+    def get(self, request):
+        queryset = GuestDevice.objects.select_related("sponsor", "approved_by", "network").filter(
+            approval_status=GuestDevice.ApprovalStatus.PENDING
+        )
+        if not request.user.is_superuser:
+            queryset = queryset.filter(sponsor=request.user)
+        serializer = GuestDeviceSerializer(queryset.order_by("-created_at"), many=True)
+        return Response(serializer.data)
+
+
+class GuestApproveAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request=GuestApprovalDecisionSerializer,
+        responses={200: GuestDeviceSerializer},
+        description="Approve pending guest request. Only assigned responsible user (or superuser) can approve.",
+    )
+    def post(self, request, pk):
+        guest = get_object_or_404(GuestDevice.objects.select_related("sponsor"), pk=pk)
+        if not request.user.is_superuser and guest.sponsor_id != request.user.id:
+            raise PermissionDenied("Missing permission to approve this guest request.")
+        if guest.approval_status != GuestDevice.ApprovalStatus.PENDING:
+            raise ValidationError({"status": "Only pending requests can be approved."})
+
+        guest.approval_status = GuestDevice.ApprovalStatus.APPROVED
+        guest.enabled = True
+        guest.approved_by = request.user
+        guest.approved_at = timezone.now()
+        guest.rejected_reason = ""
+        guest.save(
+            update_fields=[
+                "approval_status",
+                "enabled",
+                "approved_by",
+                "approved_at",
+                "rejected_reason",
+                "updated_at",
+            ]
+        )
+        return Response(GuestDeviceSerializer(guest).data, status=status.HTTP_200_OK)
+
+
+class GuestRejectAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request=GuestApprovalDecisionSerializer,
+        responses={200: GuestDeviceSerializer},
+        description="Reject pending guest request. Only assigned responsible user (or superuser) can reject.",
+    )
+    def post(self, request, pk):
+        serializer = GuestApprovalDecisionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        guest = get_object_or_404(GuestDevice.objects.select_related("sponsor"), pk=pk)
+        if not request.user.is_superuser and guest.sponsor_id != request.user.id:
+            raise PermissionDenied("Missing permission to reject this guest request.")
+        if guest.approval_status != GuestDevice.ApprovalStatus.PENDING:
+            raise ValidationError({"status": "Only pending requests can be rejected."})
+
+        guest.approval_status = GuestDevice.ApprovalStatus.REJECTED
+        guest.enabled = False
+        guest.rejected_reason = serializer.validated_data.get("reason", "").strip()
+        guest.save(update_fields=["approval_status", "enabled", "rejected_reason", "updated_at"])
+        return Response(GuestDeviceSerializer(guest).data, status=status.HTTP_200_OK)

@@ -69,9 +69,17 @@
 
   <section class="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
     <article class="rounded-lg border border-slate-200 bg-white p-4">
-      <h2 class="mb-3 text-lg font-medium">OS Family Distribution</h2>
+      <h2 class="mb-3 text-lg font-medium">OS Distribution (Family + Name + Flavor)</h2>
       <div class="mx-auto max-w-xs">
         <canvas id="os-family-chart"></canvas>
+        <div class="mt-2 flex items-center justify-between gap-2 text-xs text-slate-600">
+          <span id="os-chart-scope" class="truncate">Scope: All</span>
+          <div class="flex items-center gap-2">
+            <button id="os-chart-back" type="button" class="hidden rounded border border-slate-300 px-2 py-0.5 hover:bg-slate-100">Back</button>
+            <button id="os-chart-reset" type="button" class="hidden rounded border border-slate-300 px-2 py-0.5 hover:bg-slate-100">Reset</button>
+          </div>
+        </div>
+        <p class="mt-1 text-[11px] text-slate-500">Click inner ring (Family), then middle ring (Name).</p>
       </div>
     </article>
     <article class="rounded-lg border border-slate-200 bg-white p-4">
@@ -100,6 +108,281 @@
   {{ asset_type_distribution|json_script:"asset-type-distribution-data" }}
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
+    function hexToRgba(hex, alpha) {
+      const normalized = (hex || "").replace("#", "");
+      const value = normalized.length === 3
+        ? normalized.split("").map(function (ch) { return ch + ch; }).join("")
+        : normalized;
+      const r = parseInt(value.slice(0, 2), 16);
+      const g = parseInt(value.slice(2, 4), 16);
+      const b = parseInt(value.slice(4, 6), 16);
+      return "rgba(" + r + ", " + g + ", " + b + ", " + alpha + ")";
+    }
+
+    function buildOsTripleDonut(elementId, dataScriptId) {
+      const canvas = document.getElementById(elementId);
+      const script = document.getElementById(dataScriptId);
+      const scopeNode = document.getElementById("os-chart-scope");
+      const backButton = document.getElementById("os-chart-back");
+      const resetButton = document.getElementById("os-chart-reset");
+      if (!canvas || !script) {
+        return;
+      }
+
+      const parsed = JSON.parse(script.textContent || "[]");
+      const familyBaseColors = {
+        "Windows": "#1d4ed8",
+        "Linux": "#16a34a",
+        "NAS OS": "#0ea5e9",
+        "Network OS": "#f59e0b",
+        "Android": "#22c55e",
+        "macOS": "#7c3aed",
+        "Other": "#334155",
+        "No OS": "#9ca3af",
+      };
+
+      const state = {
+        family: null,
+        name: null,
+      };
+
+      function scopedItems() {
+        return parsed.filter(function (item) {
+          if (state.family && item.family !== state.family) {
+            return false;
+          }
+          if (state.name && item.name !== state.name) {
+            return false;
+          }
+          return true;
+        });
+      }
+
+      function buildDatasets(items) {
+        const familyTotals = items.reduce(function (acc, item) {
+          const family = item.family || "Other";
+          acc[family] = (acc[family] || 0) + (item.count || 0);
+          return acc;
+        }, {});
+        const innerLabels = Object.keys(familyTotals);
+        const innerValues = innerLabels.map(function (family) { return familyTotals[family]; });
+        const innerColors = innerLabels.map(function (family) {
+          return familyBaseColors[family] || "#475569";
+        });
+        const innerMeta = innerLabels.map(function (family) {
+          return { family: family, name: null, flavor: null };
+        });
+
+        const familyShadeCounters = {};
+        const shadeSteps = [0.95, 0.8, 0.65, 0.5, 0.35];
+        const nameTotals = items.reduce(function (acc, item) {
+          const family = item.family || "Other";
+          const name = item.name || "Unknown";
+          const key = family + "|" + name;
+          if (!acc[key]) {
+            acc[key] = { family: family, name: name, count: 0 };
+          }
+          acc[key].count += item.count || 0;
+          return acc;
+        }, {});
+        const middleItems = Object.values(nameTotals);
+        const middleLabels = middleItems.map(function (item) { return item.name; });
+        const middleValues = middleItems.map(function (item) { return item.count; });
+        const middleColors = middleItems.map(function (item) {
+          const family = item.family || "Other";
+          const base = familyBaseColors[family] || "#475569";
+          const current = familyShadeCounters[family] || 0;
+          familyShadeCounters[family] = current + 1;
+          return hexToRgba(base, shadeSteps[current % shadeSteps.length]);
+        });
+        const middleMeta = middleItems.map(function (item) {
+          return { family: item.family, name: item.name, flavor: null };
+        });
+
+        const outerLabels = items.map(function (item) {
+          return item.flavor || "No flavor";
+        });
+        const outerValues = items.map(function (item) { return item.count; });
+        const outerColors = items.map(function (item) {
+          const family = item.family || "Other";
+          const base = familyBaseColors[family] || "#475569";
+          const current = familyShadeCounters[family] || 0;
+          familyShadeCounters[family] = current + 1;
+          return hexToRgba(base, shadeSteps[(current + 2) % shadeSteps.length]);
+        });
+        const outerMeta = items.map(function (item) {
+          return { family: item.family || "Other", name: item.name || "Unknown", flavor: item.flavor || "No flavor" };
+        });
+
+        return {
+          labels: outerLabels,
+          datasets: [
+            {
+              level: "flavor",
+              label: "Flavor",
+              ringLabels: outerLabels,
+              ringMeta: outerMeta,
+              data: outerValues,
+              backgroundColor: outerColors,
+              borderColor: "#ffffff",
+              borderWidth: 1,
+              weight: 4,
+            },
+            {
+              level: "name",
+              label: "Name",
+              ringLabels: middleLabels,
+              ringMeta: middleMeta,
+              data: middleValues,
+              backgroundColor: middleColors,
+              borderColor: "#ffffff",
+              borderWidth: 1,
+              weight: 3,
+            },
+            {
+              level: "family",
+              label: "Family",
+              ringLabels: innerLabels,
+              ringMeta: innerMeta,
+              data: innerValues,
+              backgroundColor: innerColors,
+              borderColor: "#ffffff",
+              borderWidth: 1,
+              weight: 2,
+            },
+          ],
+        };
+      }
+
+      const initial = buildDatasets(scopedItems());
+
+      const chart = new Chart(canvas, {
+        type: "doughnut",
+        data: {
+          labels: initial.labels,
+          datasets: initial.datasets,
+        },
+        options: {
+          cutout: "35%",
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              mode: "nearest",
+              intersect: true,
+              callbacks: {
+                title: function () {
+                  return "";
+                },
+                label: function (context) {
+                  const dataset = context.chart.data.datasets[context.datasetIndex] || {};
+                  const customLabels = dataset.ringLabels || context.chart.data.labels || [];
+                  const label = customLabels[context.dataIndex] || context.label || "";
+                  const value = context.raw || 0;
+                  return (dataset.label || "Value") + ": " + label + " (" + value + ")";
+                },
+              },
+            },
+          },
+        },
+      });
+
+      function updateScopeUi() {
+        if (!scopeNode) {
+          return;
+        }
+        var scope = "Scope: All";
+        if (state.family && state.name) {
+          scope = "Scope: " + state.family + " / " + state.name;
+        } else if (state.family) {
+          scope = "Scope: " + state.family;
+        }
+        scopeNode.textContent = scope;
+
+        if (backButton) {
+          if (state.family || state.name) {
+            backButton.classList.remove("hidden");
+          } else {
+            backButton.classList.add("hidden");
+          }
+        }
+        if (resetButton) {
+          if (state.family || state.name) {
+            resetButton.classList.remove("hidden");
+          } else {
+            resetButton.classList.add("hidden");
+          }
+        }
+      }
+
+      function redraw() {
+        const next = buildDatasets(scopedItems());
+        chart.data.labels = next.labels;
+        chart.data.datasets = next.datasets;
+        chart.update();
+        updateScopeUi();
+      }
+
+      canvas.addEventListener("click", function (event) {
+        const points = chart.getElementsAtEventForMode(event, "nearest", { intersect: true }, true);
+        if (!points.length) {
+          return;
+        }
+        const point = points[0];
+        const dataset = chart.data.datasets[point.datasetIndex];
+        const meta = (dataset.ringMeta || [])[point.index];
+        if (!meta) {
+          return;
+        }
+
+        if (dataset.level === "family") {
+          if (state.family === meta.family && !state.name) {
+            state.family = null;
+          } else {
+            state.family = meta.family;
+          }
+          state.name = null;
+          redraw();
+          return;
+        }
+
+        if (dataset.level === "name") {
+          state.family = meta.family;
+          if (state.name === meta.name) {
+            state.name = null;
+          } else {
+            state.name = meta.name;
+          }
+          redraw();
+          return;
+        }
+
+        if (dataset.level === "flavor") {
+          state.family = meta.family;
+          state.name = meta.name;
+          redraw();
+        }
+      });
+
+      if (backButton) {
+        backButton.addEventListener("click", function () {
+          if (state.name) {
+            state.name = null;
+          } else if (state.family) {
+            state.family = null;
+          }
+          redraw();
+        });
+      }
+      if (resetButton) {
+        resetButton.addEventListener("click", function () {
+          state.family = null;
+          state.name = null;
+          redraw();
+        });
+      }
+      updateScopeUi();
+    }
+
     function buildPieChart(elementId, dataScriptId, palette) {
       const canvas = document.getElementById(elementId);
       const script = document.getElementById(dataScriptId);
@@ -130,10 +413,9 @@
       });
     }
 
-    buildPieChart(
+    buildOsTripleDonut(
       "os-family-chart",
-      "os-distribution-data",
-      ["#0f172a", "#1d4ed8", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"]
+      "os-distribution-data"
     );
     buildPieChart(
       "computer-activity-chart",
