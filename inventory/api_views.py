@@ -54,6 +54,8 @@ from .serializers import (
     OSFamilyLookupSerializer,
     PortCreateSerializer,
     PortLookupSerializer,
+    GroupMembershipSerializer,
+    UserCreateSerializer,
     PortUpdateSerializer,
     UserLookupSerializer,
 )
@@ -742,3 +744,87 @@ class GuestRejectAPIView(APIView):
         guest.rejected_reason = serializer.validated_data.get("reason", "").strip()
         guest.save(update_fields=["approval_status", "enabled", "rejected_reason", "updated_at"])
         return Response(GuestDeviceSerializer(guest).data, status=status.HTTP_200_OK)
+
+
+class UserViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
+    """API endpoint for creating users."""
+    queryset = User.objects.all()
+    serializer_class = None
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        
+        if self.action == 'create':
+            return UserCreateSerializer
+        return UserLookupSerializer
+
+    @extend_schema(
+        request=UserCreateSerializer,
+        responses={201: UserLookupSerializer}
+    )
+    def create(self, request, *args, **kwargs):
+        """Create a new user and optionally add to groups."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        
+        response_serializer = UserLookupSerializer(user)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+
+class GroupMembershipViewSet(viewsets.GenericViewSet):
+    """API endpoint for managing group memberships."""
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request=None,
+        responses={200: None}
+    )
+    @action(detail=False, methods=['post'], url_path='add-member')
+    def add_member(self, request):
+        """Add a user to a group as member or admin."""
+        
+        serializer = GroupMembershipSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = serializer.save()
+        
+        return Response({
+            'message': f'User {result["user"].username} added to group {result["group"].name} as {result["role"]}',
+            'user_id': result['user'].id,
+            'group_id': result['group'].id,
+            'role': result['role']
+        }, status=status.HTTP_200_OK)
+    
+    @extend_schema(
+        request=None,
+        responses={200: None}
+    )
+    @action(detail=False, methods=['post'], url_path='remove-member')
+    def remove_member(self, request):
+        """Remove a user from a group."""
+        user_id = request.data.get('user_id')
+        group_id = request.data.get('group_id')
+        
+        if not user_id or not group_id:
+            return Response(
+                {'error': 'Both user_id and group_id are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            user = User.objects.get(id=user_id)
+            group = OrganizationalGroup.objects.get(id=group_id)
+        except (User.DoesNotExist, OrganizationalGroup.DoesNotExist) as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        group.members.remove(user)
+        group.admins.remove(user)
+        
+        return Response({
+            'message': f'User {user.username} removed from group {group.name}',
+            'user_id': user.id,
+            'group_id': group.id
+        }, status=status.HTTP_200_OK)
