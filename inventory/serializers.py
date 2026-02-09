@@ -1079,3 +1079,81 @@ class BulkInterfaceRowSerializer(serializers.Serializer):
             )
 
         return attrs
+
+
+class UserCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating new users."""
+    password = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    groups = serializers.PrimaryKeyRelatedField(
+        queryset=OrganizationalGroup.objects.all(),
+        many=True,
+        required=False,
+        allow_empty=True
+    )
+    role = serializers.ChoiceField(
+        choices=['member', 'admin'],
+        required=False,
+        default='member',
+        write_only=True
+    )
+
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'password', 'groups', 'role')
+        read_only_fields = ('id',)
+
+    def create(self, validated_data):
+        groups_data = validated_data.pop('groups', [])
+        role = validated_data.pop('role', 'member')
+        password = validated_data.pop('password', None)
+        
+        user = User(**validated_data)
+        if password:
+            user.set_password(password)
+        else:
+            user.set_unusable_password()
+        
+        try:
+            user.full_clean()
+        except DjangoValidationError as error:
+            _raise_drf_validation(error)
+        
+        user.save()
+        
+        # Add user to groups
+        for group in groups_data:
+            if role == 'admin':
+                group.admins.add(user)
+            else:
+                group.members.add(user)
+        
+        return user
+
+
+class GroupMembershipSerializer(serializers.Serializer):
+    """Serializer for adding users to groups."""
+    user_id = serializers.IntegerField(required=True)
+    group_id = serializers.IntegerField(required=True)
+    role = serializers.ChoiceField(choices=['member', 'admin'], default='member')
+
+    def validate_user_id(self, value):
+        if not User.objects.filter(id=value).exists():
+            raise serializers.ValidationError(f"User with id {value} does not exist.")
+        return value
+
+    def validate_group_id(self, value):
+        if not OrganizationalGroup.objects.filter(id=value).exists():
+            raise serializers.ValidationError(f"Group with id {value} does not exist.")
+        return value
+
+    def save(self):
+        user = User.objects.get(id=self.validated_data['user_id'])
+        group = OrganizationalGroup.objects.get(id=self.validated_data['group_id'])
+        role = self.validated_data['role']
+        
+        if role == 'admin':
+            group.admins.add(user)
+        else:
+            group.members.add(user)
+        
+        return {'user': user, 'group': group, 'role': role}
