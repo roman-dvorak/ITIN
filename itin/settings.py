@@ -56,6 +56,7 @@ TEMPLATES = [
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
+                "django.template.context_processors.debug",
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
@@ -75,9 +76,19 @@ DATABASES = {
         "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "itin"),
         "HOST": os.environ.get("POSTGRES_HOST", "db"),
         "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+    },
+    "dhcp_database": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("DHCP_DB_NAME", "kea"),
+        "USER": os.environ.get("DHCP_DB_USER", "kea_itin"),
+        "PASSWORD": os.environ.get("DHCP_DB_PASSWORD", ""),
+        "HOST": os.environ.get("DHCP_DB_HOST", "krokodyl.ujf.cas.cz"),
+        "PORT": os.environ.get("DHCP_DB_PORT", "5432"),
     }
 }
 
+
+DATABASE_ROUTERS = ["itin.db_routers.DhcpDatabaseRouter"]
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},

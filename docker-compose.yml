@@ -25,6 +25,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-itin}
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
+      DHCP_DB_NAME: ${DHCP_DB_NAME:-kea}
+      DHCP_DB_USER: ${DHCP_DB_USER:-kea_itin}
+      DHCP_DB_PASSWORD: ${DHCP_DB_PASSWORD}
+      DHCP_DB_HOST: ${DHCP_DB_HOST:-krokodyl.ujf.cas.cz}
+      DHCP_DB_PORT: ${DHCP_DB_PORT:-5432}
     volumes:
       - .:/app
       - exports:/exports

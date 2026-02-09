@@ -129,3 +129,64 @@ class GuestDeviceAdmin(admin.ModelAdmin):
     search_fields = ("device_name", "owner_name", "owner_email", "mac_address", "description", "sponsor__email")
     autocomplete_fields = ("sponsor", "approved_by", "network")
     filter_horizontal = ("groups",)
+
+
+# DHCP Database Models (read-only)
+from .models_dhcp import Lease4, Hosts
+
+
+@admin.register(Lease4)
+class Lease4Admin(admin.ModelAdmin):
+    list_display = ("address_display", "hwaddr_display", "hostname", "expire", "subnet_id")
+    list_filter = ("subnet_id",)
+    search_fields = ("hostname",)
+    readonly_fields = ("address", "hwaddr", "client_id", "valid_lifetime", "expire", 
+                       "subnet_id", "fqdn_fwd", "fqdn_rev", "hostname", "state",
+                       "user_context", "relay_id", "remote_id", "pool_id")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.display(description="IP Address")
+    def address_display(self, obj):
+        import socket
+        import struct
+        return socket.inet_ntoa(struct.pack("!I", obj.address))
+
+    @admin.display(description="MAC Address")
+    def hwaddr_display(self, obj):
+        if obj.hwaddr:
+            return ":".join(f"{b:02x}" for b in obj.hwaddr)
+        return None
+
+
+@admin.register(Hosts)
+class HostsAdmin(admin.ModelAdmin):
+    list_display = ("host_id", "hostname", "ipv4_address_display", "dhcp_identifier_display", "dhcp4_subnet_id")
+    list_filter = ("dhcp4_subnet_id",)
+    search_fields = ("hostname",)
+    readonly_fields = ("host_id",)  # auto-generated
+    # Removed other readonly fields to allow editing
+
+
+
+
+    @admin.display(description="IPv4 Address")
+    def ipv4_address_display(self, obj):
+        if obj.ipv4_address:
+            import socket
+            import struct
+            return socket.inet_ntoa(struct.pack("!I", obj.ipv4_address))
+        return None
+
+    @admin.display(description="Identifier (MAC)")
+    def dhcp_identifier_display(self, obj):
+        if obj.dhcp_identifier:
+            return ":".join(f"{b:02x}" for b in obj.dhcp_identifier)
+        return None
