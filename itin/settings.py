@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "allauth.account",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.openid_connect",
+    "django_q",
     "inventory.apps.InventoryConfig",
 ]
 
@@ -77,6 +78,53 @@ DATABASES = {
         "PORT": os.environ.get("POSTGRES_PORT", "5432"),
     }
 }
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+REDIS_SCHEME = os.environ.get("REDIS_SCHEME", "redis") or "redis"
+REDIS_HOST = os.environ.get("REDIS_HOST", "redis") or "redis"
+REDIS_PORT = _env_int("REDIS_PORT", 6379)
+REDIS_DB = _env_int("REDIS_DB", 0)
+REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", "")
+
+if REDIS_PASSWORD:
+    REDIS_URL = (
+        f"{REDIS_SCHEME}://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+    )
+else:
+    REDIS_URL = f"{REDIS_SCHEME}://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL") or REDIS_URL
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND") or REDIS_URL
+CELERY_TASK_TRACK_STARTED = os.environ.get("CELERY_TASK_TRACK_STARTED", "1") == "1"
+CELERY_TASK_TIME_LIMIT = _env_int("CELERY_TASK_TIME_LIMIT", 300)
+CELERY_TASK_SOFT_TIME_LIMIT = _env_int("CELERY_TASK_SOFT_TIME_LIMIT", 240)
+
+Q_CLUSTER = {
+    "name": os.environ.get("DJANGO_Q_NAME", "itin"),
+    "workers": _env_int("DJANGO_Q_WORKERS", 2),
+    "timeout": _env_int("DJANGO_Q_TIMEOUT", 90),
+    "retry": _env_int("DJANGO_Q_RETRY", 120),
+    "queue_limit": _env_int("DJANGO_Q_QUEUE_LIMIT", 50),
+    "bulk": _env_int("DJANGO_Q_BULK", 10),
+    "orm": os.environ.get("DJANGO_Q_ORM", "0") == "1",
+}
+
+if not Q_CLUSTER["orm"]:
+    q_redis = {
+        "host": REDIS_HOST,
+        "port": REDIS_PORT,
+        "db": _env_int("DJANGO_Q_REDIS_DB", REDIS_DB),
+    }
+    if REDIS_PASSWORD:
+        q_redis["password"] = REDIS_PASSWORD
+    Q_CLUSTER["redis"] = q_redis
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

@@ -13,6 +13,24 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    command: >
+      sh -c 'if [ -n "$$REDIS_PASSWORD" ]; then
+      exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD";
+      else
+      exec redis-server --appendonly yes;
+      fi'
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    volumes:
+      - redis_data_prod:/data
+    healthcheck:
+      test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" ping; else redis-cli ping; fi"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   web:
     build: .
     command: >
@@ -38,6 +56,24 @@ services:
       ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:-}
       ENTRA_OIDC_CLIENT_ID: ${ENTRA_OIDC_CLIENT_ID:-}
       ENTRA_OIDC_CLIENT_SECRET: ${ENTRA_OIDC_CLIENT_SECRET:-}
+      REDIS_SCHEME: ${REDIS_SCHEME:-redis}
+      REDIS_HOST: redis
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-}
+      CELERY_TASK_TRACK_STARTED: ${CELERY_TASK_TRACK_STARTED:-1}
+      CELERY_TASK_TIME_LIMIT: ${CELERY_TASK_TIME_LIMIT:-300}
+      CELERY_TASK_SOFT_TIME_LIMIT: ${CELERY_TASK_SOFT_TIME_LIMIT:-240}
+      DJANGO_Q_NAME: ${DJANGO_Q_NAME:-itin}
+      DJANGO_Q_WORKERS: ${DJANGO_Q_WORKERS:-2}
+      DJANGO_Q_TIMEOUT: ${DJANGO_Q_TIMEOUT:-90}
+      DJANGO_Q_RETRY: ${DJANGO_Q_RETRY:-120}
+      DJANGO_Q_QUEUE_LIMIT: ${DJANGO_Q_QUEUE_LIMIT:-50}
+      DJANGO_Q_BULK: ${DJANGO_Q_BULK:-10}
+      DJANGO_Q_ORM: ${DJANGO_Q_ORM:-0}
+      DJANGO_Q_REDIS_DB: ${DJANGO_Q_REDIS_DB:-0}
     volumes:
       - static_data:/app/staticfiles
       - media_data:/app/media
@@ -47,9 +83,112 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery:
+    build: .
+    command: celery -A itin worker -l info
+    environment:
+      DJANGO_DEBUG: 0
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost}
+      DJANGO_SITE_ID: ${DJANGO_SITE_ID:-1}
+      DJANGO_LANGUAGE_CODE: ${DJANGO_LANGUAGE_CODE:-en-us}
+      DJANGO_TIME_ZONE: ${DJANGO_TIME_ZONE:-UTC}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-}
+      DJANGO_SECURE_SSL_REDIRECT: ${DJANGO_SECURE_SSL_REDIRECT:-0}
+      DJANGO_SESSION_COOKIE_SECURE: ${DJANGO_SESSION_COOKIE_SECURE:-1}
+      DJANGO_CSRF_COOKIE_SECURE: ${DJANGO_CSRF_COOKIE_SECURE:-1}
+      POSTGRES_DB: ${POSTGRES_DB:-itin}
+      POSTGRES_USER: ${POSTGRES_USER:-itin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-itin}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      ENTRA_OIDC_PROVIDER_ID: ${ENTRA_OIDC_PROVIDER_ID:-entra}
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:-}
+      ENTRA_OIDC_CLIENT_ID: ${ENTRA_OIDC_CLIENT_ID:-}
+      ENTRA_OIDC_CLIENT_SECRET: ${ENTRA_OIDC_CLIENT_SECRET:-}
+      REDIS_SCHEME: ${REDIS_SCHEME:-redis}
+      REDIS_HOST: redis
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-}
+      CELERY_TASK_TRACK_STARTED: ${CELERY_TASK_TRACK_STARTED:-1}
+      CELERY_TASK_TIME_LIMIT: ${CELERY_TASK_TIME_LIMIT:-300}
+      CELERY_TASK_SOFT_TIME_LIMIT: ${CELERY_TASK_SOFT_TIME_LIMIT:-240}
+      DJANGO_Q_NAME: ${DJANGO_Q_NAME:-itin}
+      DJANGO_Q_WORKERS: ${DJANGO_Q_WORKERS:-2}
+      DJANGO_Q_TIMEOUT: ${DJANGO_Q_TIMEOUT:-90}
+      DJANGO_Q_RETRY: ${DJANGO_Q_RETRY:-120}
+      DJANGO_Q_QUEUE_LIMIT: ${DJANGO_Q_QUEUE_LIMIT:-50}
+      DJANGO_Q_BULK: ${DJANGO_Q_BULK:-10}
+      DJANGO_Q_ORM: ${DJANGO_Q_ORM:-0}
+      DJANGO_Q_REDIS_DB: ${DJANGO_Q_REDIS_DB:-0}
+    volumes:
+      - media_data:/app/media
+      - exports:/exports
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  qcluster:
+    build: .
+    command: python manage.py qcluster
+    environment:
+      DJANGO_DEBUG: 0
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost}
+      DJANGO_SITE_ID: ${DJANGO_SITE_ID:-1}
+      DJANGO_LANGUAGE_CODE: ${DJANGO_LANGUAGE_CODE:-en-us}
+      DJANGO_TIME_ZONE: ${DJANGO_TIME_ZONE:-UTC}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-}
+      DJANGO_SECURE_SSL_REDIRECT: ${DJANGO_SECURE_SSL_REDIRECT:-0}
+      DJANGO_SESSION_COOKIE_SECURE: ${DJANGO_SESSION_COOKIE_SECURE:-1}
+      DJANGO_CSRF_COOKIE_SECURE: ${DJANGO_CSRF_COOKIE_SECURE:-1}
+      POSTGRES_DB: ${POSTGRES_DB:-itin}
+      POSTGRES_USER: ${POSTGRES_USER:-itin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-itin}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      ENTRA_OIDC_PROVIDER_ID: ${ENTRA_OIDC_PROVIDER_ID:-entra}
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:-}
+      ENTRA_OIDC_CLIENT_ID: ${ENTRA_OIDC_CLIENT_ID:-}
+      ENTRA_OIDC_CLIENT_SECRET: ${ENTRA_OIDC_CLIENT_SECRET:-}
+      REDIS_SCHEME: ${REDIS_SCHEME:-redis}
+      REDIS_HOST: redis
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-}
+      CELERY_TASK_TRACK_STARTED: ${CELERY_TASK_TRACK_STARTED:-1}
+      CELERY_TASK_TIME_LIMIT: ${CELERY_TASK_TIME_LIMIT:-300}
+      CELERY_TASK_SOFT_TIME_LIMIT: ${CELERY_TASK_SOFT_TIME_LIMIT:-240}
+      DJANGO_Q_NAME: ${DJANGO_Q_NAME:-itin}
+      DJANGO_Q_WORKERS: ${DJANGO_Q_WORKERS:-2}
+      DJANGO_Q_TIMEOUT: ${DJANGO_Q_TIMEOUT:-90}
+      DJANGO_Q_RETRY: ${DJANGO_Q_RETRY:-120}
+      DJANGO_Q_QUEUE_LIMIT: ${DJANGO_Q_QUEUE_LIMIT:-50}
+      DJANGO_Q_BULK: ${DJANGO_Q_BULK:-10}
+      DJANGO_Q_ORM: ${DJANGO_Q_ORM:-0}
+      DJANGO_Q_REDIS_DB: ${DJANGO_Q_REDIS_DB:-0}
+    volumes:
+      - media_data:/app/media
+      - exports:/exports
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
   pg_data_prod:
+  redis_data_prod:
   static_data:
   media_data:
   exports:
