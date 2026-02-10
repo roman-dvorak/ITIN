@@ -359,8 +359,8 @@ class AssetListView(LoginRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        current_queryset = self.object_list
-        assets_for_table = list(current_queryset)
+        assets_for_table = list(context.get("object_list", self.object_list))
+        filtered_queryset = self.object_list
         for asset in assets_for_table:
             mac_addresses = [interface.mac_address for interface in asset.interfaces.all() if interface.mac_address]
             asset.mac_preview = mac_addresses[:2]
@@ -373,11 +373,10 @@ class AssetListView(LoginRequiredMixin, ListView):
                 os_labels.append(label)
             asset.os_display = ", ".join(os_labels)
 
-        asset_ids = [asset.id for asset in assets_for_table]
-        owners = User.objects.filter(owned_assets__id__in=asset_ids).distinct().order_by("email")
-        groups = OrganizationalGroup.objects.filter(assets__id__in=asset_ids).distinct().order_by("name")
+        owners = User.objects.filter(owned_assets__in=filtered_queryset).distinct().order_by("email")
+        groups = OrganizationalGroup.objects.filter(assets__in=filtered_queryset).distinct().order_by("name")
         os_families = (
-            OSFamily.objects.filter(assetos__asset__id__in=asset_ids)
+            OSFamily.objects.filter(assetos__asset__in=filtered_queryset)
             .distinct()
             .order_by("family", "name", "flavor", "id")
         )
