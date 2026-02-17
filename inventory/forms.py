@@ -6,9 +6,11 @@ from .access import assignable_locations_for_user
 from .models import (
     Asset,
     AssetOS,
+    AssetTag,
     GuestDevice,
     Location,
     Network,
+    NetworkApprovalRequest,
     NetworkInterface,
     OrganizationalGroup,
     Port,
@@ -68,13 +70,22 @@ class AssetEditForm(forms.ModelForm):
             "serial_number",
             "manufacturer",
             "model",
+            "commissioning_date",
+            "tags",
+            "lifetime_override_months",
             "notes",
             "metadata",
         )
+        labels = {
+            "name": "Hostname",
+            "serial_number": "Serial number / Manufacturer tag",
+        }
         widgets = {
             "groups": forms.SelectMultiple(),
             "notes": forms.Textarea(attrs={"rows": 3}),
             "metadata": forms.Textarea(attrs={"rows": 4}),
+            "commissioning_date": forms.DateInput(attrs={"type": "date"}),
+            "tags": forms.SelectMultiple(),
         }
 
     def __init__(self, *args, user, **kwargs):
@@ -85,6 +96,7 @@ class AssetEditForm(forms.ModelForm):
             required=False,
             label="Location",
         )
+        self.fields["tags"].queryset = AssetTag.objects.all()
         self.fields["owner"].queryset = User.objects.filter(is_active=True).order_by("email")
         if user.is_superuser:
             self.fields["groups"].queryset = OrganizationalGroup.objects.all().order_by("name")
@@ -96,7 +108,7 @@ class AssetEditForm(forms.ModelForm):
                 allowed_ids.add(self.instance.location_id)
             self.fields["location"].queryset = Location.objects.filter(id__in=allowed_ids).select_related("parent").order_by("name")
         apply_base_field_styles(self.fields)
-        apply_select2(self.fields, ["owner", "groups", "asset_type", "status", "location"])
+        apply_select2(self.fields, ["owner", "groups", "asset_type", "status", "location", "tags"])
 
 
 class AssetOSFeaturesForm(forms.ModelForm):
@@ -293,3 +305,65 @@ class GuestSelfRegistrationForm(forms.Form):
         guest.full_clean()
         guest.save()
         return guest
+
+
+class QuickPortInterfaceForm(forms.Form):
+    interface_name = forms.CharField(max_length=120, label="Interface name")
+    port_kind = forms.ChoiceField(choices=Port.PortKind.choices, initial=Port.PortKind.RJ45, label="Port kind")
+    description = forms.CharField(required=False, max_length=500, label="Description")
+    mac_address = forms.CharField(required=False, max_length=17, label="MAC address")
+
+    def __init__(self, *args, asset=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.asset = asset
+        apply_base_field_styles(self.fields)
+        apply_select2(self.fields, ["port_kind"])
+
+    def clean_interface_name(self):
+        name = self.cleaned_data["interface_name"].strip()
+        if self.asset and NetworkInterface.objects.filter(asset=self.asset, identifier=name).exists():
+            raise forms.ValidationError("Interface identifier must be unique per asset.")
+        return name
+
+    def clean_mac_address(self):
+        mac = self.cleaned_data.get("mac_address", "").strip()
+        if mac:
+            mac = normalize_mac(mac)
+            validate_mac(mac)
+        return mac or None
+
+    def save(self):
+        from django.db import transaction
+
+        name = self.cleaned_data["interface_name"]
+        with transaction.atomic():
+            port = Port.objects.create(
+                asset=self.asset,
+                name=name,
+                port_kind=self.cleaned_data["port_kind"],
+                notes=self.cleaned_data.get("description", ""),
+                active=True,
+            )
+            interface = NetworkInterface(
+                asset=self.asset,
+                port=port,
+                identifier=name,
+                mac_address=self.cleaned_data.get("mac_address"),
+                active=True,
+            )
+            interface.full_clean()
+            interface.save()
+        return port, interface
+
+
+class NetworkApprovalActionForm(forms.Form):
+    ACTION_CHOICES = [
+        ("approve", "Approve"),
+        ("reject", "Reject"),
+    ]
+    action = forms.ChoiceField(choices=ACTION_CHOICES)
+    review_note = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 2}))
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        apply_base_field_styles(self.fields)

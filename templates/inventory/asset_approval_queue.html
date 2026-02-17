@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Network Approval Queue | IT Asset Tracker{% endblock %}
+
+{% block content %}
+  <div class="mb-6">
+    <h1 class="text-2xl font-semibold">Network Approval Queue</h1>
+    <p class="text-sm text-slate-600">Pending network approval requests.</p>
+  </div>
+
+  <div class="rounded-lg border border-slate-200 bg-white">
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-200 text-sm">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="px-3 py-2 text-left font-medium text-slate-600">Asset</th>
+            <th class="px-3 py-2 text-left font-medium text-slate-600">Requested by</th>
+            <th class="px-3 py-2 text-left font-medium text-slate-600">Date</th>
+            <th class="px-3 py-2 text-left font-medium text-slate-600">Note</th>
+            <th class="px-3 py-2 text-left font-medium text-slate-600">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-200">
+          {% for req in requests %}
+            <tr>
+              <td class="px-3 py-2">
+                <a href="{% url 'inventory:asset-detail' req.asset.id %}" class="font-medium text-slate-900 hover:text-blue-700">{{ req.asset.name|default:"(no hostname)" }}</a>
+              </td>
+              <td class="px-3 py-2">{{ req.requested_by.email }}</td>
+              <td class="px-3 py-2">{{ req.requested_at|date:"Y-m-d H:i" }}</td>
+              <td class="px-3 py-2">{{ req.note|default:"-" }}</td>
+              <td class="px-3 py-2">
+                <div class="flex items-center gap-1">
+                  <form method="post" action="{% url 'inventory:asset-approval-action' req.id %}" class="inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="approve">
+                    <button type="submit" class="rounded bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-500">Approve</button>
+                  </form>
+                  <form method="post" action="{% url 'inventory:asset-approval-action' req.id %}" class="inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="reject">
+                    <button type="submit" class="rounded bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-500">Reject</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td class="px-3 py-2 text-slate-500" colspan="5">No pending approval requests.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

@@ -4,6 +4,7 @@ import ipaddress
 import re
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.db.models import Q
@@ -12,6 +13,7 @@ from django.dispatch import receiver
 from django.urls import reverse
 from django.utils.text import slugify
 from django.utils import timezone
+from simple_history.models import HistoricalRecords
 
 MAC_ADDRESS_RE = re.compile(r"^([0-9a-fA-F]{2}[:-]){5}([0-9a-fA-F]{2})$")
 
@@ -183,7 +185,9 @@ class Asset(TimeStampedModel):
     class Status(models.TextChoices):
         ACTIVE = "ACTIVE", "Active"
         STORED = "STORED", "Stored"
+        SPARE = "SPARE", "Spare"
         RETIRED = "RETIRED", "Retired"
+        DISCARDED = "DISCARDED", "Discarded"
         LOST = "LOST", "Lost"
 
     name = models.CharField(max_length=200, blank=True)
@@ -214,7 +218,13 @@ class Asset(TimeStampedModel):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
     notes = models.TextField(blank=True)
     metadata = models.JSONField(default=dict, blank=True)
+    commissioning_date = models.DateField(null=True, blank=True, verbose_name="Commissioning date")
+    tags = models.ManyToManyField("AssetTag", related_name="assets", blank=True)
+    lifetime_override_months = models.PositiveIntegerField(
+        null=True, blank=True, verbose_name="Lifetime override (months)"
+    )
 
+    history = HistoricalRecords()
     objects = AssetQuerySet.as_manager()
 
     def __str__(self) -> str:
@@ -230,6 +240,52 @@ class Asset(TimeStampedModel):
             entries = self._prefetched_objects_cache["os_entries"]
             return entries[0] if entries else None
         return self.os_entries.select_related("family").order_by("-id").first()
+
+    @property
+    def effective_lifetime_months(self):
+        if self.lifetime_override_months:
+            return self.lifetime_override_months
+        try:
+            return AssetTypeLifetime.objects.get(asset_type=self.asset_type).planned_lifetime_months
+        except AssetTypeLifetime.DoesNotExist:
+            return None
+
+    @property
+    def end_of_lifetime(self):
+        months = self.effective_lifetime_months
+        if months and self.commissioning_date:
+            from dateutil.relativedelta import relativedelta
+            return self.commissioning_date + relativedelta(months=months)
+        return None
+
+    @property
+    def current_approval_status(self):
+        latest = self.approval_requests.order_by("-requested_at").first()
+        if latest:
+            return latest.status
+        return None
+
+
+class AssetTag(models.Model):
+    name = models.CharField(max_length=120, unique=True)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ("name",)
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class AssetTypeLifetime(models.Model):
+    asset_type = models.CharField(max_length=20, choices=Asset.AssetType.choices, unique=True)
+    planned_lifetime_months = models.PositiveIntegerField(help_text="Default lifetime in months")
+
+    class Meta:
+        ordering = ("asset_type",)
+
+    def __str__(self) -> str:
+        return f"{self.get_asset_type_display()} ({self.planned_lifetime_months} months)"
 
 
 class OSFamily(models.Model):
@@ -500,6 +556,42 @@ class GuestDevice(TimeStampedModel):
         return self.mac_address
 
 
+User = get_user_model()
+
+
+class NetworkApprovalRequest(TimeStampedModel):
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        APPROVED = "APPROVED", "Approved"
+        REJECTED = "REJECTED", "Rejected"
+        REVOKED = "REVOKED", "Revoked"
+
+    asset = models.ForeignKey(Asset, on_delete=models.CASCADE, related_name="approval_requests")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="submitted_approval_requests",
+    )
+    requested_at = models.DateTimeField(auto_now_add=True)
+    note = models.TextField(blank=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_approval_requests",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_note = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ("-requested_at",)
+
+    def __str__(self) -> str:
+        return f"Approval #{self.pk} for {self.asset} ({self.status})"
+
+
 @receiver(post_save, sender=Asset)
 def ensure_default_asset_connectivity(sender, instance: Asset, created: bool, **_kwargs):
     if instance.asset_type != Asset.AssetType.COMPUTER or not created:
@@ -529,3 +621,21 @@ def ensure_default_asset_connectivity(sender, instance: Asset, created: bool, **
         if interface.port_id is None:
             interface.port = port
             interface.save(update_fields=["port", "updated_at"])
+
+
+@receiver(post_save, sender=NetworkInterface)
+def revoke_approval_on_interface_change(sender, instance: NetworkInterface, created: bool, **_kwargs):
+    """Auto-revoke the latest APPROVED approval request when an interface changes."""
+    if created:
+        return
+    latest_approved = (
+        NetworkApprovalRequest.objects.filter(
+            asset=instance.asset,
+            status=NetworkApprovalRequest.Status.APPROVED,
+        )
+        .order_by("-requested_at")
+        .first()
+    )
+    if latest_approved:
+        latest_approved.status = NetworkApprovalRequest.Status.REVOKED
+        latest_approved.save(update_fields=["status", "updated_at"])

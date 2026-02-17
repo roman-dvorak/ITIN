@@ -3,7 +3,7 @@
     <table class="min-w-full divide-y divide-slate-200 text-xs">
     <thead class="bg-slate-50">
       <tr>
-        <th class="px-3 py-1.5 text-left font-medium text-slate-600">Name</th>
+        <th class="px-3 py-1.5 text-left font-medium text-slate-600">Hostname</th>
         <th class="px-3 py-1.5 text-left font-medium text-slate-600">Type</th>
         <th class="px-3 py-1.5 text-left font-medium text-slate-600">Owner</th>
         <th class="px-3 py-1.5 text-left font-medium text-slate-600">Status</th>
@@ -42,6 +42,9 @@
                 </div>
               </div>
             </div>
+            {% if asset.notes %}
+              <p class="mt-0.5 max-w-[200px] text-[11px] leading-tight text-slate-500" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">{{ asset.notes|truncatechars:120 }}</p>
+            {% endif %}
           </td>
           <td class="px-3 py-1.5">{{ asset.get_asset_type_display }}</td>
           <td class="px-3 py-1.5">

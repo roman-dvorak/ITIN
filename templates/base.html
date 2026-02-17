@@ -89,6 +89,9 @@
                 <a href="{% url 'inventory:guest-approvals' %}" class="block rounded px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-100">Approvals</a>
               </div>
             </details>
+            {% if request.user.is_staff %}
+              <a href="{% url 'inventory:asset-approval-queue' %}" class="text-slate-700 hover:text-slate-950">Approvals</a>
+            {% endif %}
             <a href="{% url 'inventory:user-list' %}" class="text-slate-700 hover:text-slate-950">Users</a>
             <details class="relative">
               <summary class="list-none cursor-pointer rounded bg-slate-100 px-2 py-1 text-xs text-slate-700 hover:bg-slate-200">
@@ -117,7 +120,7 @@
         </nav>
       </div>
     </header>
-    <main class="mx-auto max-w-7xl px-4 py-6">
+    <main class="mx-auto {% block main_container_class %}max-w-7xl{% endblock %} px-4 py-6">
       {% if messages %}
         <section class="mb-4 space-y-2">
           {% for message in messages %}

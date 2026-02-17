@@ -1,6 +1,9 @@
 from django.urls import path
 
 from .views import (
+    AssetApprovalActionView,
+    AssetApprovalQueueView,
+    AssetApprovalRequestView,
     AssetCreateView,
     AssetDetailView,
     AssetExportView,
@@ -15,6 +18,7 @@ from .views import (
     AssetPortInterfaceCreateView,
     AssetPortInterfaceUpdateView,
     AssetPortUpdateView,
+    AssetQuickPortInterfaceView,
     GuestApprovalListView,
     GuestApproveView,
     GuestRejectView,
@@ -57,6 +61,10 @@ urlpatterns = [
         AssetPortInterfaceUpdateView.as_view(),
         name="asset-port-interface-update",
     ),
+    path("asset/<int:pk>/quick-port-interface/", AssetQuickPortInterfaceView.as_view(), name="asset-quick-port-interface"),
+    path("asset/<int:pk>/request-approval/", AssetApprovalRequestView.as_view(), name="asset-request-approval"),
+    path("asset/approvals/", AssetApprovalQueueView.as_view(), name="asset-approval-queue"),
+    path("asset/approvals/<int:pk>/action/", AssetApprovalActionView.as_view(), name="asset-approval-action"),
     path("asset/overview/", AssetOverviewView.as_view(), name="asset-overview"),
     path("guest/register/", GuestSelfRegisterView.as_view(), name="guest-register"),
     path("guest/approvals/", GuestApprovalListView.as_view(), name="guest-approvals"),

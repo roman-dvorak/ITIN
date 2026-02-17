@@ -6,10 +6,13 @@ from django.urls import reverse
 from .models import (
     Asset,
     AssetOS,
+    AssetTag,
+    AssetTypeLifetime,
     GuestDevice,
     IPAddress,
     Location,
     Network,
+    NetworkApprovalRequest,
     NetworkInterface,
     OrganizationalGroup,
     OSFamily,
@@ -49,11 +52,11 @@ class AssetOSInline(admin.StackedInline):
 
 @admin.register(Asset)
 class AssetAdmin(admin.ModelAdmin):
-    list_display = ("name", "asset_type", "status", "owner", "location")
+    list_display = ("name", "asset_type", "status", "owner", "location", "commissioning_date")
     list_filter = ("asset_type", "status", "location")
     search_fields = ("name", "asset_tag", "serial_number")
     autocomplete_fields = ("owner", "location")
-    filter_horizontal = ("groups",)
+    filter_horizontal = ("groups", "tags")
     inlines = [AssetOSInline]
 
     def view_on_site(self, obj):
@@ -111,6 +114,24 @@ class PortAdmin(admin.ModelAdmin):
     list_display = ("asset", "name", "port_kind", "active")
     list_filter = ("port_kind", "active")
     search_fields = ("asset__name", "name")
+
+
+@admin.register(AssetTag)
+class AssetTagAdmin(admin.ModelAdmin):
+    list_display = ("name", "description")
+    search_fields = ("name",)
+
+
+@admin.register(AssetTypeLifetime)
+class AssetTypeLifetimeAdmin(admin.ModelAdmin):
+    list_display = ("asset_type", "planned_lifetime_months")
+
+
+@admin.register(NetworkApprovalRequest)
+class NetworkApprovalRequestAdmin(admin.ModelAdmin):
+    list_display = ("asset", "status", "requested_by", "requested_at", "reviewed_by", "reviewed_at")
+    list_filter = ("status",)
+    search_fields = ("asset__name",)
 
 
 @admin.register(GuestDevice)

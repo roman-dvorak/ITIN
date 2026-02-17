@@ -18,10 +18,12 @@ from .forms import (
     AssetEditForm,
     AssetOSFeaturesForm,
     GuestSelfRegistrationForm,
+    NetworkApprovalActionForm,
     PortCreateForm,
     PortEditForm,
     PortInterfaceCreateForm,
     PortInterfaceEditForm,
+    QuickPortInterfaceForm,
 )
 from .models import (
     Asset,
@@ -29,6 +31,7 @@ from .models import (
     GuestDevice,
     IPAddress,
     Network,
+    NetworkApprovalRequest,
     NetworkInterface,
     OrganizationalGroup,
     OSFamily,
@@ -94,6 +97,7 @@ def with_asset_table_related(queryset):
     )
     return queryset.select_related("owner", "location", "location__parent").prefetch_related(
         "groups",
+        "tags",
         "os_entries__family",
         Prefetch("interfaces", queryset=interface_queryset),
     )
@@ -106,13 +110,16 @@ def filter_asset_queryset(queryset, params):
         owners = [value.strip() for value in params.getlist("owner") if value.strip()]
         groups = [value.strip() for value in params.getlist("group") if value.strip()]
         os_families = [value.strip() for value in params.getlist("os_family") if value.strip()]
+        asset_types = [value.strip() for value in params.getlist("asset_type") if value.strip()]
     else:
         statuses = [params.get("status", "").strip()]
         owners = [params.get("owner", "").strip()]
         groups = [params.get("group", "").strip()]
         os_families = [params.get("os_family", "").strip()]
+        asset_types = [params.get("asset_type", "").strip()]
 
     valid_statuses = [value for value in statuses if value in {choice[0] for choice in Asset.Status.choices}]
+    valid_asset_types = [value for value in asset_types if value in {choice[0] for choice in Asset.AssetType.choices}]
     valid_owner_ids = [int(value) for value in owners if value.isdigit()]
     valid_group_ids = [int(value) for value in groups if value.isdigit()]
     valid_os_family_ids = [int(value) for value in os_families if value.isdigit()]
@@ -128,6 +135,8 @@ def filter_asset_queryset(queryset, params):
         queryset = queryset.filter(groups__id__in=valid_group_ids)
     if valid_os_family_ids:
         queryset = queryset.filter(os_entries__family_id__in=valid_os_family_ids)
+    if valid_asset_types:
+        queryset = queryset.filter(asset_type__in=valid_asset_types)
     return queryset.order_by("name").distinct()
 
 
@@ -393,7 +402,9 @@ class AssetListView(LoginRequiredMixin, ListView):
         context["owner_filters"] = [value.strip() for value in self.request.GET.getlist("owner") if value.strip()]
         context["group_filters"] = [value.strip() for value in self.request.GET.getlist("group") if value.strip()]
         context["os_family_filters"] = [value.strip() for value in self.request.GET.getlist("os_family") if value.strip()]
+        context["asset_type_filters"] = [value.strip() for value in self.request.GET.getlist("asset_type") if value.strip()]
         context["status_choices"] = Asset.Status.choices
+        context["asset_type_choices"] = Asset.AssetType.choices
         context["owner_choices"] = owners
         context["group_choices"] = groups
         context["os_family_choices"] = os_families
@@ -606,6 +617,9 @@ class AssetDetailView(LoginRequiredMixin, DetailView):
         context["can_edit"] = can_edit_asset(self.request.user, asset)
         context["can_access_admin"] = user_has_admin_access(self.request.user)
         context["ports_tree"], context["unassigned_interfaces"] = build_ports_tree(asset)
+        context["history"] = asset.history.all()[:50]
+        context["current_approval_status"] = asset.current_approval_status
+        context["latest_approval"] = asset.approval_requests.first()
         return context
 
 
@@ -814,6 +828,7 @@ class AssetEditView(LoginRequiredMixin, View):
             "port_form": port_form or PortCreateForm(prefix="port"),
             "ports_tree": ports_tree,
             "unassigned_interfaces": unassigned_interfaces,
+            "quick_port_interface_form": QuickPortInterfaceForm(asset=asset, prefix="quick"),
         }
 
 
@@ -1106,3 +1121,80 @@ class UserDetailView(LoginRequiredMixin, DetailView):
             visible_assets_for_user(self.request.user).filter(owner=context["profile_user"])
         )
         return context
+
+
+class AssetQuickPortInterfaceView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        asset = get_editable_asset_or_403(request.user, pk)
+        form = QuickPortInterfaceForm(request.POST, asset=asset, prefix="quick")
+        if form.is_valid():
+            port, interface = form.save()
+            messages.success(request, f"Port {port.name} and interface {interface.identifier} created.")
+        else:
+            for field, errors in form.errors.items():
+                messages.error(request, f"{field}: {' '.join(errors)}")
+        return redirect("inventory:asset-edit", pk=asset.pk)
+
+
+class AssetApprovalRequestView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        asset = get_object_or_404(visible_assets_for_user(request.user), pk=pk)
+        if not can_edit_asset(request.user, asset):
+            raise PermissionDenied("Missing edit permission for this asset.")
+        note = request.POST.get("note", "").strip()
+        NetworkApprovalRequest.objects.create(
+            asset=asset,
+            requested_by=request.user,
+            note=note,
+        )
+        messages.success(request, f"Approval request submitted for {asset.name}.")
+        return redirect("inventory:asset-detail", pk=asset.pk)
+
+
+class AssetApprovalQueueView(LoginRequiredMixin, ListView):
+    template_name = "inventory/asset_approval_queue.html"
+    context_object_name = "requests"
+    paginate_by = 50
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_staff:
+            raise PermissionDenied("Only staff can access the approval queue.")
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
+        return (
+            NetworkApprovalRequest.objects.filter(status=NetworkApprovalRequest.Status.PENDING)
+            .select_related("asset", "requested_by")
+            .order_by("-requested_at")
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["can_access_admin"] = user_has_admin_access(self.request.user)
+        return context
+
+
+class AssetApprovalActionView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        if not request.user.is_staff:
+            raise PermissionDenied("Only staff can review approval requests.")
+        approval = get_object_or_404(NetworkApprovalRequest, pk=pk)
+        if approval.status != NetworkApprovalRequest.Status.PENDING:
+            messages.error(request, "Only pending requests can be reviewed.")
+            return redirect("inventory:asset-approval-queue")
+        form = NetworkApprovalActionForm(request.POST)
+        if form.is_valid():
+            action = form.cleaned_data["action"]
+            review_note = form.cleaned_data.get("review_note", "")
+            if action == "approve":
+                approval.status = NetworkApprovalRequest.Status.APPROVED
+            else:
+                approval.status = NetworkApprovalRequest.Status.REJECTED
+            approval.reviewed_by = request.user
+            approval.reviewed_at = timezone.now()
+            approval.review_note = review_note
+            approval.save()
+            messages.success(request, f"Request {approval.status.lower()} for {approval.asset.name}.")
+        else:
+            messages.error(request, "Invalid action.")
+        return redirect("inventory:asset-approval-queue")
