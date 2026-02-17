@@ -173,8 +173,10 @@ AUTHENTICATION_BACKENDS = [
     "allauth.account.auth_backends.AuthenticationBackend",
 ]
 
-ACCOUNT_UNIQUE_EMAIL = True
+ACCOUNT_UNIQUE_EMAIL = False
 ACCOUNT_EMAIL_VERIFICATION = "none"
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
 ACCOUNT_USER_MODEL_USERNAME_FIELD = "username"
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
@@ -183,8 +185,11 @@ ACCOUNT_LOGIN_BY_CODE_ENABLED = False
 
 SOCIALACCOUNT_LOGIN_ON_GET = True
 SOCIALACCOUNT_AUTO_SIGNUP = True
+SOCIALACCOUNT_ADAPTER = "itin.adapters.CustomSocialAccountAdapter"
+ACCOUNT_ADAPTER = "itin.adapters.CustomAccountAdapter"
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
 SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
+SOCIALACCOUNT_QUERY_EMAIL = False
 SOCIALACCOUNT_STORE_TOKENS = True
 
 ENTRA_OIDC_PROVIDER_ID = os.environ.get("ENTRA_OIDC_PROVIDER_ID", "entra")
@@ -199,7 +204,7 @@ if ENTRA_TENANT_ID and ENTRA_OIDC_CLIENT_ID and ENTRA_OIDC_CLIENT_SECRET:
         "APPS": [
             {
                 "provider_id": ENTRA_OIDC_PROVIDER_ID,
-                "name": "Microsoft Entra ID",
+                "name": "UJF Identity",
                 "client_id": ENTRA_OIDC_CLIENT_ID,
                 "secret": ENTRA_OIDC_CLIENT_SECRET,
                 "settings": {

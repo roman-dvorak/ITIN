@@ -78,8 +78,8 @@ services:
       - static_data:/app/staticfiles
       - media_data:/app/media
       - exports:/exports
-    ports:
-      - "8000:8000"
+    #ports:
+      #- "8000:8000"  # Disabled - nginx proxies via Docker network
     depends_on:
       db:
         condition: service_healthy
