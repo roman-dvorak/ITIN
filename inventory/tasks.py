@@ -71,6 +71,62 @@ def run_task_with_capture(task_name: str, triggered_by_id: int | None = None, **
     return task_run
 
 
+def execute_task_in_background(task_run_id: int, task_name: str, **kwargs) -> None:
+    """Worker function called by Django-Q. Updates an existing TaskRun record."""
+    entry = TASK_REGISTRY.get(task_name)
+    if not entry:
+        TaskRun.objects.filter(pk=task_run_id).update(
+            status=TaskRun.Status.FAILED,
+            result_data={"error": f"Unknown task: {task_name}"},
+            finished_at=timezone.now(),
+        )
+        return
+
+    task_run = TaskRun.objects.get(pk=task_run_id)
+    task_run.status = TaskRun.Status.RUNNING
+    task_run.save(update_fields=["status"])
+
+    buf = io.StringIO()
+    old_stdout = sys.stdout
+    sys.stdout = buf
+    try:
+        result = entry["func"](**kwargs)
+        task_run.status = TaskRun.Status.SUCCESS
+        task_run.result_data = result if isinstance(result, dict) else {}
+    except Exception as exc:
+        task_run.status = TaskRun.Status.FAILED
+        task_run.result_data = {"error": str(exc)}
+        buf.write(f"\nERROR: {exc}\n")
+    finally:
+        sys.stdout = old_stdout
+        task_run.stdout = buf.getvalue()
+        task_run.finished_at = timezone.now()
+        task_run.save(update_fields=["status", "stdout", "result_data", "finished_at"])
+
+
+def enqueue_task(task_name: str, triggered_by_id: int | None = None, **kwargs) -> TaskRun:
+    """Create a PENDING TaskRun and enqueue the work as a Django-Q background task."""
+    from django_q.tasks import async_task
+
+    if task_name not in TASK_REGISTRY:
+        raise ValueError(f"Unknown task: {task_name}")
+
+    task_run = TaskRun.objects.create(
+        task_name=task_name,
+        status=TaskRun.Status.PENDING,
+        triggered_by_id=triggered_by_id,
+    )
+
+    async_task(
+        "inventory.tasks.execute_task_in_background",
+        task_run.pk,
+        task_name,
+        **kwargs,
+    )
+
+    return task_run
+
+
 def get_graph_client() -> GraphServiceClient:
     """
     Get authenticated Microsoft Graph client.

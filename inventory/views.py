@@ -1324,7 +1324,7 @@ class TaskTriggerView(LoginRequiredMixin, View):
     def post(self, request):
         if not request.user.is_staff:
             raise PermissionDenied("Only staff can trigger tasks.")
-        from .tasks import TASK_REGISTRY, run_task_with_capture
+        from .tasks import TASK_REGISTRY
 
         task_name = request.POST.get("task_name", "").strip()
         if task_name not in TASK_REGISTRY:
@@ -1338,6 +1338,6 @@ class TaskTriggerView(LoginRequiredMixin, View):
             if param_type == "bool":
                 kwargs[param_name] = request.POST.get(param_name) == "on"
 
-        task_run = run_task_with_capture(task_name, triggered_by_id=request.user.pk, **kwargs)
-        messages.success(request, f"Task '{task_name}' finished with status: {task_run.status}")
+        from .tasks import enqueue_task
+        task_run = enqueue_task(task_name, triggered_by_id=request.user.pk, **kwargs)
         return redirect("inventory:task-detail", pk=task_run.pk)
