@@ -9,6 +9,7 @@
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
       .select2-container {
         width: 100% !important;
@@ -91,6 +92,7 @@
             </details>
             {% if request.user.is_staff %}
               <a href="{% url 'inventory:asset-approval-queue' %}" class="text-slate-700 hover:text-slate-950">Approvals</a>
+              <a href="{% url 'inventory:task-dashboard' %}" class="text-slate-700 hover:text-slate-950">Tasks</a>
             {% endif %}
             <a href="{% url 'inventory:user-list' %}" class="text-slate-700 hover:text-slate-950">Users</a>
             <details class="relative">
@@ -154,9 +156,15 @@
       }
       document.addEventListener("DOMContentLoaded", function () {
         initSelect2(document);
+        if (window.lucide) {
+          lucide.createIcons();
+        }
       });
       document.body.addEventListener("htmx:afterSwap", function (event) {
         initSelect2(event.target);
+        if (window.lucide) {
+          lucide.createIcons();
+        }
       });
     </script>
   </body>

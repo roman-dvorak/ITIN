@@ -28,6 +28,9 @@ from .views import (
     LocationDetailView,
     LocationDetailLegacyRedirectView,
     LocationTreeView,
+    TaskDashboardView,
+    TaskDetailView,
+    TaskTriggerView,
     UserDetailView,
     UserListView,
 )
@@ -72,4 +75,7 @@ urlpatterns = [
     path("guest/<int:pk>/reject/", GuestRejectView.as_view(), name="guest-reject"),
     path("user/", UserListView.as_view(), name="user-list"),
     path("user/<int:pk>/", UserDetailView.as_view(), name="user-detail"),
+    path("tasks/", TaskDashboardView.as_view(), name="task-dashboard"),
+    path("tasks/<int:pk>/", TaskDetailView.as_view(), name="task-detail"),
+    path("tasks/run/", TaskTriggerView.as_view(), name="task-trigger"),
 ]

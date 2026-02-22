@@ -125,85 +125,132 @@
   </div>
 
   <section class="rounded-lg border border-slate-200 bg-white p-4">
-    <h2 class="mb-3 text-lg font-medium">Ports and Interfaces</h2>
+    <div class="mb-3 flex items-center justify-between">
+      <h2 class="text-lg font-medium">Ports and Interfaces</h2>
+      <button type="button" onclick="document.getElementById('quick-port-modal').showModal()" class="inline-flex h-8 items-center gap-1 rounded bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-500">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+        Port + Interface
+      </button>
+    </div>
+
     <div class="space-y-3">
       {% for item in ports_tree %}
-        <article class="rounded border border-slate-200 p-3">
-          <form method="post" action="{% url 'inventory:asset-port-update' asset.id item.port.id %}" class="mb-3 grid grid-cols-1 gap-2 rounded border border-slate-200 bg-slate-50 p-3 md:grid-cols-[1fr_170px_1fr_auto]">
-            {% csrf_token %}
-            <div>
-              <label for="{{ item.port_edit_form.name.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Port name</label>
-              {{ item.port_edit_form.name }}
-            </div>
-            <div>
-              <label for="{{ item.port_edit_form.port_kind.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Kind</label>
-              {{ item.port_edit_form.port_kind }}
-            </div>
-            <div>
-              <label for="{{ item.port_edit_form.notes.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Notes</label>
-              {{ item.port_edit_form.notes }}
-            </div>
-            <div class="flex items-end gap-2">
-              <button type="submit" name="action" value="save" class="inline-flex h-9 items-center rounded border border-slate-300 px-3 text-xs hover:bg-slate-100">Save</button>
-              <button type="submit" name="action" value="deactivate" class="inline-flex h-9 items-center rounded border border-amber-300 bg-amber-50 px-3 text-xs text-amber-800 hover:bg-amber-100">Deactivate</button>
-            </div>
-          </form>
-
-          <div class="space-y-2">
-            {% for row in item.interface_rows %}
-              <form method="post" action="{% url 'inventory:asset-port-interface-update' asset.id item.port.id row.interface.id %}" class="grid grid-cols-1 gap-2 rounded border border-slate-200 p-3 md:grid-cols-[1fr_1fr_1fr_auto]">
-                {% csrf_token %}
-                <div>
-                  <label for="{{ row.form.identifier.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Identifier</label>
-                  {{ row.form.identifier }}
-                </div>
-                <div>
-                  <label for="{{ row.form.mac_address.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">MAC</label>
-                  {{ row.form.mac_address }}
-                </div>
-                <div>
-                  <label for="{{ row.form.notes.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Notes</label>
-                  {{ row.form.notes }}
-                </div>
-                <div class="flex items-end gap-2">
-                  <button type="submit" name="action" value="save" class="inline-flex h-9 items-center rounded border border-slate-300 px-3 text-xs hover:bg-slate-100">Save</button>
-                  <button type="submit" name="action" value="deactivate" class="inline-flex h-9 items-center rounded border border-amber-300 bg-amber-50 px-3 text-xs text-amber-800 hover:bg-amber-100">Deactivate</button>
-                </div>
-                <div class="md:col-span-4 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-                  {% for ip in row.interface.ip_addresses.all %}
-                    <span class="mr-2 inline-block">{{ ip.address }} ({{ ip.network.name }}){% if not ip.active %} - inactive{% endif %}</span>
-                  {% empty %}
-                    -
-                  {% endfor %}
-                </div>
-              </form>
-            {% empty %}
-              <p class="text-sm text-slate-500">No interfaces under this port.</p>
-            {% endfor %}
-          </div>
-
-          <details class="mt-3 rounded-lg border border-violet-200 bg-violet-50/40">
-            <summary class="cursor-pointer select-none px-3 py-2 text-sm font-semibold text-violet-900">Add interface to {{ item.port.name }}</summary>
-            <form method="post" action="{% url 'inventory:asset-port-interface-add' asset.id item.port.id %}" class="grid grid-cols-1 gap-2 border-t border-violet-200 bg-white p-3 md:grid-cols-[1fr_1fr_1fr_auto]">
+        {% if item.is_simple %}
+          {# Simple port: one compact card combining port + interface fields #}
+          {% with row=item.interface_rows.0 %}
+          <article class="rounded border border-slate-200">
+            <form method="post" action="{% url 'inventory:asset-port-update' asset.id item.port.id %}" class="grid grid-cols-1 gap-2 p-3 md:grid-cols-[1fr_140px_1fr_1fr_auto]">
               {% csrf_token %}
+              <input type="hidden" name="__simple" value="1">
               <div>
-                <label for="{{ item.interface_form.identifier.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Identifier</label>
-                {{ item.interface_form.identifier }}
+                <label for="{{ item.port_edit_form.name.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Name</label>
+                {{ item.port_edit_form.name }}
               </div>
               <div>
-                <label for="{{ item.interface_form.mac_address.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">MAC</label>
-                {{ item.interface_form.mac_address }}
+                <label for="{{ item.port_edit_form.port_kind.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Kind</label>
+                {{ item.port_edit_form.port_kind }}
               </div>
               <div>
-                <label for="{{ item.interface_form.notes.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Notes</label>
-                {{ item.interface_form.notes }}
+                <label class="mb-1 block text-xs font-semibold text-slate-600">MAC</label>
+                <input type="text" value="{{ row.interface.mac_address|default_if_none:'' }}" class="h-9 w-full rounded border border-slate-300 bg-slate-50 px-2 text-sm text-slate-500" disabled title="Edit MAC via interface form">
               </div>
-              <div class="flex items-end">
-                <button type="submit" class="inline-flex h-9 items-center rounded border border-slate-300 px-3 text-sm hover:bg-slate-100">Add interface</button>
+              <div>
+                <label for="{{ item.port_edit_form.notes.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Notes</label>
+                {{ item.port_edit_form.notes }}
+              </div>
+              <div class="flex items-end gap-2">
+                <button type="submit" name="action" value="save" class="inline-flex h-9 items-center rounded border border-slate-300 px-3 text-xs hover:bg-slate-100">Save</button>
+                <button type="submit" name="action" value="deactivate" class="inline-flex h-9 items-center rounded border border-amber-300 bg-amber-50 px-3 text-xs text-amber-800 hover:bg-amber-100">Deactivate</button>
               </div>
             </form>
-          </details>
-        </article>
+            <div class="border-t border-slate-100 px-3 py-2 text-xs text-slate-600">
+              {% for ip in row.interface.ip_addresses.all %}
+                <span class="mr-2 inline-block">{{ ip.address }} ({{ ip.network.name }}){% if not ip.active %} - inactive{% endif %}</span>
+              {% empty %}
+                <span class="text-slate-400">No IPs</span>
+              {% endfor %}
+            </div>
+          </article>
+          {% endwith %}
+        {% else %}
+          {# Complex port: port form on top, interface forms indented below #}
+          <article class="rounded border border-slate-200 p-3">
+            <form method="post" action="{% url 'inventory:asset-port-update' asset.id item.port.id %}" class="mb-3 grid grid-cols-1 gap-2 rounded border border-slate-200 bg-slate-50 p-3 md:grid-cols-[1fr_170px_1fr_auto]">
+              {% csrf_token %}
+              <div>
+                <label for="{{ item.port_edit_form.name.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Port name</label>
+                {{ item.port_edit_form.name }}
+              </div>
+              <div>
+                <label for="{{ item.port_edit_form.port_kind.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Kind</label>
+                {{ item.port_edit_form.port_kind }}
+              </div>
+              <div>
+                <label for="{{ item.port_edit_form.notes.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Notes</label>
+                {{ item.port_edit_form.notes }}
+              </div>
+              <div class="flex items-end gap-2">
+                <button type="submit" name="action" value="save" class="inline-flex h-9 items-center rounded border border-slate-300 px-3 text-xs hover:bg-slate-100">Save</button>
+                <button type="submit" name="action" value="deactivate" class="inline-flex h-9 items-center rounded border border-amber-300 bg-amber-50 px-3 text-xs text-amber-800 hover:bg-amber-100">Deactivate</button>
+              </div>
+            </form>
+
+            <div class="space-y-2 pl-4">
+              {% for row in item.interface_rows %}
+                <form method="post" action="{% url 'inventory:asset-port-interface-update' asset.id item.port.id row.interface.id %}" class="grid grid-cols-1 gap-2 rounded border border-slate-200 p-3 md:grid-cols-[1fr_1fr_1fr_auto]">
+                  {% csrf_token %}
+                  <div>
+                    <label for="{{ row.form.identifier.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Identifier</label>
+                    {{ row.form.identifier }}
+                  </div>
+                  <div>
+                    <label for="{{ row.form.mac_address.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">MAC</label>
+                    {{ row.form.mac_address }}
+                  </div>
+                  <div>
+                    <label for="{{ row.form.notes.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Notes</label>
+                    {{ row.form.notes }}
+                  </div>
+                  <div class="flex items-end gap-2">
+                    <button type="submit" name="action" value="save" class="inline-flex h-9 items-center rounded border border-slate-300 px-3 text-xs hover:bg-slate-100">Save</button>
+                    <button type="submit" name="action" value="deactivate" class="inline-flex h-9 items-center rounded border border-amber-300 bg-amber-50 px-3 text-xs text-amber-800 hover:bg-amber-100">Deactivate</button>
+                  </div>
+                  <div class="md:col-span-4 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                    {% for ip in row.interface.ip_addresses.all %}
+                      <span class="mr-2 inline-block">{{ ip.address }} ({{ ip.network.name }}){% if not ip.active %} - inactive{% endif %}</span>
+                    {% empty %}
+                      -
+                    {% endfor %}
+                  </div>
+                </form>
+              {% empty %}
+                <p class="text-sm text-slate-500">No interfaces under this port.</p>
+              {% endfor %}
+            </div>
+
+            <details class="mt-3 rounded-lg border border-violet-200 bg-violet-50/40">
+              <summary class="cursor-pointer select-none px-3 py-2 text-sm font-semibold text-violet-900">Add interface to {{ item.port.name }}</summary>
+              <form method="post" action="{% url 'inventory:asset-port-interface-add' asset.id item.port.id %}" class="grid grid-cols-1 gap-2 border-t border-violet-200 bg-white p-3 md:grid-cols-[1fr_1fr_1fr_auto]">
+                {% csrf_token %}
+                <div>
+                  <label for="{{ item.interface_form.identifier.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Identifier</label>
+                  {{ item.interface_form.identifier }}
+                </div>
+                <div>
+                  <label for="{{ item.interface_form.mac_address.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">MAC</label>
+                  {{ item.interface_form.mac_address }}
+                </div>
+                <div>
+                  <label for="{{ item.interface_form.notes.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Notes</label>
+                  {{ item.interface_form.notes }}
+                </div>
+                <div class="flex items-end">
+                  <button type="submit" class="inline-flex h-9 items-center rounded border border-slate-300 px-3 text-sm hover:bg-slate-100">Add interface</button>
+                </div>
+              </form>
+            </details>
+          </article>
+        {% endif %}
       {% empty %}
         <p class="text-sm text-slate-500">No ports defined yet.</p>
       {% endfor %}
@@ -219,10 +266,6 @@
         </ul>
       </div>
     {% endif %}
-
-    <div class="mt-3 flex items-center gap-2">
-      <button type="button" onclick="document.getElementById('quick-port-modal').showModal()" class="inline-flex h-9 items-center rounded bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-500">Quick add Port + Interface</button>
-    </div>
 
     <dialog id="quick-port-modal" class="rounded-lg border border-slate-200 bg-white p-0 shadow-xl backdrop:bg-slate-900/50">
       <div class="w-[28rem] p-5">
@@ -257,29 +300,5 @@
         </form>
       </div>
     </dialog>
-
-    <details class="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/40">
-      <summary class="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-emerald-900">Add Port</summary>
-      <section class="border-t border-emerald-200 bg-white p-4">
-        <form method="post" action="{% url 'inventory:asset-port-add' asset.id %}" class="grid grid-cols-1 gap-2 md:grid-cols-[1fr_180px_1fr_auto]">
-          {% csrf_token %}
-          <div>
-            <label for="{{ port_form.name.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Name</label>
-            {{ port_form.name }}
-          </div>
-          <div>
-            <label for="{{ port_form.port_kind.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Kind</label>
-            {{ port_form.port_kind }}
-          </div>
-          <div>
-            <label for="{{ port_form.notes.id_for_label }}" class="mb-1 block text-xs font-semibold text-slate-600">Notes</label>
-            {{ port_form.notes }}
-          </div>
-          <div class="flex items-end">
-            <button type="submit" class="inline-flex h-9 items-center rounded border border-slate-300 px-3 text-sm hover:bg-slate-100">Create port</button>
-          </div>
-        </form>
-      </section>
-    </details>
   </section>
 {% endblock %}

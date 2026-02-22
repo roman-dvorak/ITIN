@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Task Run #{{ run.pk }}{% endblock %}
+
+{% block content %}
+  <div class="mb-6 flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-semibold">Task Run #{{ run.pk }}</h1>
+      <p class="text-sm text-slate-600">{{ run.task_name }}</p>
+    </div>
+    <a href="{% url 'inventory:task-dashboard' %}" class="rounded border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100">Back to dashboard</a>
+  </div>
+
+  <section class="mb-6 rounded-lg border border-slate-200 bg-white p-4">
+    <h2 class="mb-3 text-lg font-medium">Details</h2>
+    <dl class="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+      <div>
+        <dt class="font-semibold text-slate-700">Status</dt>
+        <dd>
+          <span class="rounded px-2 py-0.5 text-xs font-medium
+            {% if run.status == 'SUCCESS' %}bg-emerald-100 text-emerald-800
+            {% elif run.status == 'RUNNING' %}bg-blue-100 text-blue-800
+            {% elif run.status == 'FAILED' %}bg-red-100 text-red-800
+            {% else %}bg-slate-100 text-slate-700{% endif %}">{{ run.get_status_display }}</span>
+        </dd>
+      </div>
+      <div>
+        <dt class="font-semibold text-slate-700">Triggered by</dt>
+        <dd>{% if run.triggered_by %}{{ run.triggered_by.email }}{% else %}-{% endif %}</dd>
+      </div>
+      <div>
+        <dt class="font-semibold text-slate-700">Started</dt>
+        <dd>{{ run.started_at|date:"Y-m-d H:i:s" }}</dd>
+      </div>
+      <div>
+        <dt class="font-semibold text-slate-700">Finished</dt>
+        <dd>{% if run.finished_at %}{{ run.finished_at|date:"Y-m-d H:i:s" }}{% else %}-{% endif %}</dd>
+      </div>
+    </dl>
+  </section>
+
+  {% if run.result_data %}
+    <section class="mb-6 rounded-lg border border-slate-200 bg-white p-4">
+      <h2 class="mb-3 text-lg font-medium">Result Data</h2>
+      <pre class="overflow-x-auto rounded bg-slate-900 p-3 text-xs text-slate-100">{{ run.result_data|pprint }}</pre>
+    </section>
+  {% endif %}
+
+  <section class="rounded-lg border border-slate-200 bg-white p-4">
+    <h2 class="mb-3 text-lg font-medium">Output</h2>
+    {% if run.stdout %}
+      <pre class="overflow-x-auto rounded bg-slate-900 p-3 text-xs text-slate-100">{{ run.stdout }}</pre>
+    {% else %}
+      <p class="text-sm text-slate-500">No output captured.</p>
+    {% endif %}
+  </section>
+{% endblock %}

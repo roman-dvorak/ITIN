@@ -37,6 +37,7 @@ from .models import (
     OSFamily,
     Location,
     Port,
+    TaskRun,
 )
 
 User = get_user_model()
@@ -95,11 +96,13 @@ def with_asset_table_related(queryset):
             )
         )
     )
+    latest_approval_qs = NetworkApprovalRequest.objects.order_by("-requested_at")
     return queryset.select_related("owner", "location", "location__parent").prefetch_related(
         "groups",
         "tags",
         "os_entries__family",
         Prefetch("interfaces", queryset=interface_queryset),
+        Prefetch("approval_requests", queryset=latest_approval_qs),
     )
 
 
@@ -125,7 +128,7 @@ def filter_asset_queryset(queryset, params):
     valid_os_family_ids = [int(value) for value in os_families if value.isdigit()]
     if q:
         queryset = queryset.filter(
-            Q(name__icontains=q) | Q(asset_tag__icontains=q) | Q(serial_number__icontains=q)
+            Q(name__icontains=q) | Q(asset_tag__icontains=q) | Q(serial_number__icontains=q) | Q(notes__icontains=q)
         )
     if valid_statuses:
         queryset = queryset.filter(status__in=valid_statuses)
@@ -370,17 +373,87 @@ class AssetListView(LoginRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         assets_for_table = list(context.get("object_list", self.object_list))
         filtered_queryset = self.object_list
+        from datetime import date
+        from django.utils import timezone
+        today = date.today()
+        now = timezone.now()
+        
         for asset in assets_for_table:
             mac_addresses = [interface.mac_address for interface in asset.interfaces.all() if interface.mac_address]
             asset.mac_preview = mac_addresses[:2]
             asset.mac_extra_count = max(len(mac_addresses) - 2, 0)
             os_labels = []
+            asset.os_unsupported = False
             for os_entry in asset.os_entries.all():
                 label = os_entry.family.name_flavor
                 if os_entry.version:
                     label = f"{label} {os_entry.version}"
                 os_labels.append(label)
+                if os_entry.family.support_status == OSFamily.SupportStatus.UNSUPPORTED:
+                    asset.os_unsupported = True
             asset.os_display = ", ".join(os_labels)
+            
+            # Calculate lifecycle percentage
+            asset.lifecycle_percentage = None
+            asset.lifecycle_dashoffset = None
+            asset.lifecycle_color = "#10b981"  # green
+            if asset.commissioning_date and asset.effective_lifetime_months:
+                end_of_lifetime = asset.end_of_lifetime
+                if end_of_lifetime and end_of_lifetime <= today:
+                    asset.lifecycle_percentage = 100
+                elif asset.commissioning_date >= today:
+                    asset.lifecycle_percentage = 0
+                else:
+                    total_days = (end_of_lifetime - asset.commissioning_date).days if end_of_lifetime else (asset.effective_lifetime_months * 30)
+                    days_passed = (today - asset.commissioning_date).days
+                    asset.lifecycle_percentage = min(100, int((days_passed / total_days) * 100)) if total_days > 0 else 0
+                
+                # Calculate SVG circle stroke-dashoffset (circumference = 2 * π * r = 2 * π * 8 ≈ 50.27)
+                if asset.lifecycle_percentage is not None:
+                    circumference = 50.27
+                    progress = (asset.lifecycle_percentage / 100) * circumference
+                    asset.lifecycle_dashoffset = circumference - progress
+                    
+                    # Set color based on percentage
+                    if asset.lifecycle_percentage > 80:
+                        asset.lifecycle_color = "#ef4444"  # red
+                    elif asset.lifecycle_percentage > 60:
+                        asset.lifecycle_color = "#f59e0b"  # orange
+            
+            # Calculate activity status based on last_seen
+            if asset.last_seen:
+                time_since_seen = now - asset.last_seen
+                if time_since_seen.days <= 7:
+                    asset.activity_status = "This week"
+                    asset.activity_color = "#10b981"  # green
+                elif time_since_seen.days <= 30:
+                    asset.activity_status = "Month"
+                    asset.activity_color = "#f59e0b"  # orange
+                elif time_since_seen.days <= 90:
+                    asset.activity_status = "3 months"
+                    asset.activity_color = "#ef4444"  # red
+                else:
+                    asset.activity_status = "Inactive"
+                    asset.activity_color = "#6b7280"  # gray
+            else:
+                asset.activity_status = "Unknown"
+                asset.activity_color = "#9ca3af"  # light gray
+
+            # Approval status badge
+            approvals = list(asset.approval_requests.all())
+            if approvals:
+                latest = approvals[0]
+                asset.approval_status_display = latest.status
+                color_map = {
+                    "APPROVED": "emerald",
+                    "PENDING": "amber",
+                    "REJECTED": "red",
+                    "REVOKED": "slate",
+                }
+                asset.approval_color = color_map.get(latest.status, "slate")
+            else:
+                asset.approval_status_display = None
+                asset.approval_color = None
 
         owners = User.objects.filter(owned_assets__in=filtered_queryset).distinct().order_by("email")
         groups = OrganizationalGroup.objects.filter(assets__in=filtered_queryset).distinct().order_by("name")
@@ -814,6 +887,10 @@ class AssetEditView(LoginRequiredMixin, View):
                 }
                 for interface in item["interfaces"]
             ]
+            item["is_simple"] = (
+                len(item["interface_rows"]) == 1
+                and item["interface_rows"][0]["interface"].identifier == item["port"].name
+            )
         if os_row_forms is None:
             os_rows = list(asset.os_entries.select_related("family").order_by("-id"))
             os_row_forms = [
@@ -1197,4 +1274,70 @@ class AssetApprovalActionView(LoginRequiredMixin, View):
             messages.success(request, f"Request {approval.status.lower()} for {approval.asset.name}.")
         else:
             messages.error(request, "Invalid action.")
+        next_url = request.POST.get("next", "").strip()
+        if next_url:
+            return redirect(next_url)
         return redirect("inventory:asset-approval-queue")
+
+
+# ---------------------------------------------------------------------------
+# Task dashboard
+# ---------------------------------------------------------------------------
+
+class TaskDashboardView(LoginRequiredMixin, TemplateView):
+    template_name = "inventory/task_dashboard.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_staff:
+            raise PermissionDenied("Only staff can access the task dashboard.")
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        from .tasks import TASK_REGISTRY
+
+        context = super().get_context_data(**kwargs)
+        context["tasks"] = [
+            {"name": name, **info} for name, info in TASK_REGISTRY.items()
+        ]
+        context["recent_runs"] = TaskRun.objects.select_related("triggered_by")[:50]
+        context["can_access_admin"] = user_has_admin_access(self.request.user)
+        return context
+
+
+class TaskDetailView(LoginRequiredMixin, DetailView):
+    model = TaskRun
+    template_name = "inventory/task_detail.html"
+    context_object_name = "run"
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_staff:
+            raise PermissionDenied("Only staff can view task runs.")
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["can_access_admin"] = user_has_admin_access(self.request.user)
+        return context
+
+
+class TaskTriggerView(LoginRequiredMixin, View):
+    def post(self, request):
+        if not request.user.is_staff:
+            raise PermissionDenied("Only staff can trigger tasks.")
+        from .tasks import TASK_REGISTRY, run_task_with_capture
+
+        task_name = request.POST.get("task_name", "").strip()
+        if task_name not in TASK_REGISTRY:
+            messages.error(request, f"Unknown task: {task_name}")
+            return redirect("inventory:task-dashboard")
+
+        # Collect boolean params from checkboxes
+        entry = TASK_REGISTRY[task_name]
+        kwargs = {}
+        for param_name, param_type in entry.get("params", {}).items():
+            if param_type == "bool":
+                kwargs[param_name] = request.POST.get(param_name) == "on"
+
+        task_run = run_task_with_capture(task_name, triggered_by_id=request.user.pk, **kwargs)
+        messages.success(request, f"Task '{task_name}' finished with status: {task_run.status}")
+        return redirect("inventory:task-detail", pk=task_run.pk)

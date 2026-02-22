@@ -19,6 +19,8 @@
       osVersion: item.os_version ? String(item.os_version.version || "") : "",
       ports: item.ports || [],
       unassignedInterfaces: item.unassigned_interfaces || [],
+      lifecycle: item.lifecycle || null,
+      osSupport: item.os_family ? item.os_family.support_status : null,
     };
   }
 
@@ -644,6 +646,84 @@
       return "rounded border px-2 py-1 " + (hasError ? "border-red-400 bg-red-50" : "border-slate-300");
     }
 
+    function renderLifecycleIcon(percentage) {
+      if (percentage === null || percentage === undefined) {
+        return null;
+      }
+      
+      const radius = 8;
+      const circumference = 2 * Math.PI * radius;
+      const progress = (percentage / 100) * circumference;
+      
+      let color = "#10b981"; // green
+      if (percentage > 80) {
+        color = "#ef4444"; // red
+      } else if (percentage > 60) {
+        color = "#f59e0b"; // orange
+      }
+      
+      return element(
+        "svg",
+        { width: "20", height: "20", viewBox: "0 0 20 20", className: "inline-block" },
+        element("circle", {
+          cx: "10",
+          cy: "10",
+          r: String(radius),
+          fill: "none",
+          stroke: "#e5e7eb",
+          strokeWidth: "2",
+        }),
+        element("circle", {
+          cx: "10",
+          cy: "10",
+          r: String(radius),
+          fill: "none",
+          stroke: color,
+          strokeWidth: "2",
+          strokeDasharray: String(circumference),
+          strokeDashoffset: String(circumference - progress),
+          transform: "rotate(-90 10 10)",
+          style: { transition: "stroke-dashoffset 0.3s" },
+        })
+      );
+    }
+
+    function renderOSWarningIcon() {
+      return element(
+        "svg",
+        { width: "18", height: "18", viewBox: "0 0 24 24", className: "inline-block ml-1", fill: "none" },
+        element("path", {
+          d: "M12 9v4m0 4h.01M5.07 19c-.9-1.45-1.5-3.18-1.5-5 0-5.52 4.48-10 10-10s10 4.48 10 10c0 1.82-.6 3.55-1.5 5m-17 0h17",
+          stroke: "#ef4444",
+          strokeWidth: "2",
+          strokeLinecap: "round",
+          strokeLinejoin: "round",
+        }),
+        element("circle", {
+          cx: "12",
+          cy: "12",
+          r: "10",
+          stroke: "#ef4444",
+          strokeWidth: "2",
+        }),
+        element("line", {
+          x1: "12",
+          y1: "8",
+          x2: "12",
+          y2: "12",
+          stroke: "#ef4444",
+          strokeWidth: "2",
+          strokeLinecap: "round",
+        }),
+        element("circle", {
+          cx: "12",
+          cy: "16",
+          r: "1",
+          fill: "#ef4444",
+        })
+      );
+    }
+
     function toggleExpandedAsset(assetId) {
       setExpandedAssets(function (current) {
         const next = Object.assign({}, current);
@@ -866,21 +946,27 @@
                       "td",
                       { className: "px-3 py-2" },
                       element(
-                        "select",
-                        {
-                          className: cellClass(hasError),
-                          value: row.status,
-                          disabled: !config.canEdit,
-                          onKeyDown: function (event) {
-                            handleAssetCellKeyDown(event, row.id);
+                        "div",
+                        { className: "flex items-center gap-2" },
+                        element(
+                          "select",
+                          {
+                            className: cellClass(hasError),
+                            value: row.status,
+                            disabled: !config.canEdit,
+                            onKeyDown: function (event) {
+                              handleAssetCellKeyDown(event, row.id);
+                            },
+                            onChange: function (event) {
+                              setAssetValue(row.id, "status", event.target.value);
+                            },
                           },
-                          onChange: function (event) {
-                            setAssetValue(row.id, "status", event.target.value);
-                          },
-                        },
-                        ["ACTIVE", "STORED", "RETIRED", "LOST"].map(function (status) {
-                          return element("option", { key: status, value: status }, status);
-                        })
+                          ["ACTIVE", "STORED", "RETIRED", "LOST"].map(function (status) {
+                            return element("option", { key: status, value: status }, status);
+                          })
+                        ),
+                        row.lifecycle ? renderLifecycleIcon(row.lifecycle.percentage_elapsed) : null,
+                        row.osSupport === "UNSUPPORTED" ? renderOSWarningIcon() : null
                       )
                     ),
                     element(

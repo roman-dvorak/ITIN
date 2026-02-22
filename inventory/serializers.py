@@ -947,6 +947,7 @@ class AssetListSerializer(serializers.ModelSerializer):
     os_entries = serializers.SerializerMethodField()
     ports = serializers.SerializerMethodField()
     unassigned_interfaces = serializers.SerializerMethodField()
+    lifecycle = serializers.SerializerMethodField()
 
     class Meta:
         model = Asset
@@ -970,6 +971,7 @@ class AssetListSerializer(serializers.ModelSerializer):
             "os_entries",
             "ports",
             "unassigned_interfaces",
+            "lifecycle",
             "created_at",
             "updated_at",
         )
@@ -1024,6 +1026,35 @@ class AssetListSerializer(serializers.ModelSerializer):
             "name": obj.location.name,
             "slug": obj.location.slug,
             "path": obj.location.path_label,
+        }
+
+    def get_lifecycle(self, obj):
+        from datetime import date
+        
+        commissioning_date = obj.commissioning_date
+        end_of_lifetime = obj.end_of_lifetime
+        effective_lifetime_months = obj.effective_lifetime_months
+        
+        if not commissioning_date or not effective_lifetime_months:
+            return None
+        
+        # Calculate progress percentage
+        today = date.today()
+        if end_of_lifetime and end_of_lifetime <= today:
+            percentage = 100
+        elif commissioning_date >= today:
+            percentage = 0
+        else:
+            # Calculate days passed / total days
+            total_days = (end_of_lifetime - commissioning_date).days if end_of_lifetime else (effective_lifetime_months * 30)
+            days_passed = (today - commissioning_date).days
+            percentage = min(100, int((days_passed / total_days) * 100)) if total_days > 0 else 0
+        
+        return {
+            "commissioning_date": commissioning_date.isoformat() if commissioning_date else None,
+            "end_of_lifetime": end_of_lifetime.isoformat() if end_of_lifetime else None,
+            "effective_lifetime_months": effective_lifetime_months,
+            "percentage_elapsed": percentage,
         }
 
 

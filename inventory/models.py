@@ -219,6 +219,7 @@ class Asset(TimeStampedModel):
     notes = models.TextField(blank=True)
     metadata = models.JSONField(default=dict, blank=True)
     commissioning_date = models.DateField(null=True, blank=True, verbose_name="Commissioning date")
+    last_seen = models.DateTimeField(null=True, blank=True, verbose_name="Last seen")
     tags = models.ManyToManyField("AssetTag", related_name="assets", blank=True)
     lifetime_override_months = models.PositiveIntegerField(
         null=True, blank=True, verbose_name="Lifetime override (months)"
@@ -310,6 +311,7 @@ class OSFamily(models.Model):
         choices=SupportStatus.choices,
         default=SupportStatus.SUPPORTED,
     )
+    metadata = models.JSONField(default=dict, blank=True)
 
     class Meta:
         constraints = [
@@ -559,6 +561,20 @@ class GuestDevice(TimeStampedModel):
 User = get_user_model()
 
 
+class UserProfile(models.Model):
+    """Extended user profile with metadata from external sources."""
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="profile",
+        primary_key=True,
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+
+    def __str__(self) -> str:
+        return f"Profile for {self.user.username}"
+
+
 class NetworkApprovalRequest(TimeStampedModel):
     class Status(models.TextChoices):
         PENDING = "PENDING", "Pending"
@@ -590,6 +606,30 @@ class NetworkApprovalRequest(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"Approval #{self.pk} for {self.asset} ({self.status})"
+
+
+class TaskRun(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        RUNNING = "RUNNING", "Running"
+        SUCCESS = "SUCCESS", "Success"
+        FAILED = "FAILED", "Failed"
+
+    task_name = models.CharField(max_length=200)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    stdout = models.TextField(blank=True)
+    result_data = models.JSONField(default=dict, blank=True)
+    triggered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
+    )
+
+    class Meta:
+        ordering = ("-started_at",)
+
+    def __str__(self) -> str:
+        return f"{self.task_name} ({self.status}) @ {self.started_at}"
 
 
 @receiver(post_save, sender=Asset)

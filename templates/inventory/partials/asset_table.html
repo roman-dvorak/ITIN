@@ -7,6 +7,7 @@
         <th class="px-3 py-1.5 text-left font-medium text-slate-600">Type</th>
         <th class="px-3 py-1.5 text-left font-medium text-slate-600">Owner</th>
         <th class="px-3 py-1.5 text-left font-medium text-slate-600">Status</th>
+        <th class="px-3 py-1.5 text-left font-medium text-slate-600">Activity</th>
         <th class="px-3 py-1.5 text-left font-medium text-slate-600">OS</th>
         <th class="px-3 py-1.5 text-left font-medium text-slate-600">MAC</th>
         <th class="px-3 py-1.5 text-left font-medium text-slate-600">Groups</th>
@@ -41,12 +42,24 @@
                   {% endif %}
                 </div>
               </div>
+              {% for tag in asset.tags.all %}
+                <span class="inline-block rounded bg-blue-100 px-1.5 py-0.5 text-[11px] text-blue-800">{{ tag.name }}</span>
+              {% endfor %}
             </div>
             {% if asset.notes %}
               <p class="mt-0.5 max-w-[200px] text-[11px] leading-tight text-slate-500" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">{{ asset.notes|truncatechars:120 }}</p>
             {% endif %}
           </td>
-          <td class="px-3 py-1.5">{{ asset.get_asset_type_display }}</td>
+          <td class="px-3 py-1.5">
+            <div>{{ asset.get_asset_type_display }}</div>
+            {% if asset.serial_number or asset.asset_tag %}
+              <div class="mt-0.5 text-[10px] leading-tight text-slate-500">
+                {% if asset.serial_number %}S/N: {{ asset.serial_number }}{% endif %}
+                {% if asset.serial_number and asset.asset_tag %}<br>{% endif %}
+                {% if asset.asset_tag %}Tag: {{ asset.asset_tag }}{% endif %}
+              </div>
+            {% endif %}
+          </td>
           <td class="px-3 py-1.5">
             {% if asset.owner %}
               <a href="{% url 'inventory:user-detail' asset.owner.id %}" class="hover:text-blue-700">
@@ -59,8 +72,52 @@
             {% else %}
               <span class="text-slate-500">Unassigned</span>
             {% endif %}
+            {% if asset.location %}
+              <div class="mt-0.5 text-[10px] leading-tight text-slate-500">{{ asset.location.path_label }}</div>
+            {% endif %}
           </td>
-          <td class="px-3 py-1.5">{{ asset.get_status_display }}</td>
+          <td class="px-3 py-1.5">
+            <div class="flex items-center gap-1.5">
+              <span>{{ asset.get_status_display }}</span>
+              {% if asset.lifecycle_dashoffset is not None %}
+                <div class="relative inline-block" title="Lifecycle: {{ asset.lifecycle_percentage }}%">
+                  <svg width="20" height="20" viewBox="0 0 20 20" class="inline-block">
+                    <circle cx="10" cy="10" r="8" fill="none" stroke="#e5e7eb" stroke-width="2"/>
+                    <circle
+                      cx="10" cy="10" r="8" fill="none"
+                      stroke="{{ asset.lifecycle_color }}"
+                      stroke-width="2"
+                      stroke-dasharray="50.27"
+                      stroke-dashoffset="{{ asset.lifecycle_dashoffset }}"
+                      transform="rotate(-90 10 10)"
+                    />
+                  </svg>
+                </div>
+              {% else %}
+                <div class="relative inline-block" title="Lifecycle unknown">
+                  <svg width="20" height="20" viewBox="0 0 20 20" class="inline-block">
+                    <circle cx="10" cy="10" r="8" fill="none" stroke="#e5e7eb" stroke-width="2"/>
+                    <text x="10" y="14" text-anchor="middle" font-size="11" fill="#9ca3af">?</text>
+                  </svg>
+                </div>
+              {% endif %}
+              {% if asset.os_unsupported %}
+                <i data-lucide="alert-circle" class="inline-block" style="width: 16px; height: 16px; color: #ef4444;" title="Unsupported OS"></i>
+              {% endif %}
+              {% if asset.approval_status_display == 'APPROVED' %}
+                <i data-lucide="shield-check" class="inline-block" style="width: 16px; height: 16px; color: #10b981;" title="Network approved"></i>
+              {% elif asset.approval_status_display == 'PENDING' %}
+                <i data-lucide="shield-question" class="inline-block" style="width: 16px; height: 16px; color: #f59e0b;" title="Approval pending"></i>
+              {% elif asset.approval_status_display == 'REJECTED' %}
+                <i data-lucide="shield-x" class="inline-block" style="width: 16px; height: 16px; color: #ef4444;" title="Approval rejected"></i>
+              {% elif asset.approval_status_display == 'REVOKED' %}
+                <i data-lucide="shield-off" class="inline-block" style="width: 16px; height: 16px; color: #64748b;" title="Approval revoked"></i>
+              {% endif %}
+            </div>
+          </td>
+          <td class="px-3 py-1.5">
+            <span class="inline-block rounded px-2 py-0.5 text-[11px] font-medium" style="background-color: {{ asset.activity_color }}1a; color: {{ asset.activity_color }};">{{ asset.activity_status }}</span>
+          </td>
           <td class="px-3 py-1.5">
             {% if asset.os_display %}
               {{ asset.os_display }}
@@ -92,7 +149,7 @@
         </tr>
       {% empty %}
         <tr>
-          <td class="px-3 py-2 text-slate-500" colspan="7">No assets available.</td>
+          <td class="px-3 py-2 text-slate-500" colspan="8">No assets available.</td>
         </tr>
       {% endfor %}
     </tbody>

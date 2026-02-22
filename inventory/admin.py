@@ -17,6 +17,8 @@ from .models import (
     OrganizationalGroup,
     OSFamily,
     Port,
+    TaskRun,
+    UserProfile,
 )
 
 User = get_user_model()
@@ -28,11 +30,27 @@ except admin.sites.NotRegistered:
     pass
 
 
+class UserProfileInline(admin.StackedInline):
+    model = UserProfile
+    can_delete = False
+    verbose_name_plural = "Profile"
+    fields = ("metadata",)
+    readonly_fields = ("metadata",)
+
+
 @admin.register(User)
 class UserAdmin(DjangoUserAdmin):
     ordering = ("email",)
-    list_display = ("email", "first_name", "last_name", "is_staff", "is_superuser")
+    list_display = ("email", "first_name", "last_name", "is_staff", "is_superuser", "has_entra_data")
     search_fields = ("email", "first_name", "last_name")
+    inlines = [UserProfileInline]
+
+    @admin.display(boolean=True, description="Entra Data")
+    def has_entra_data(self, obj):
+        try:
+            return bool(obj.profile.metadata.get("entra"))
+        except UserProfile.DoesNotExist:
+            return False
 
     def view_on_site(self, obj):
         return reverse("inventory:user-detail", args=[obj.pk])
@@ -68,6 +86,7 @@ class OSFamilyAdmin(admin.ModelAdmin):
     list_display = ("name_flavor", "family", "support_status", "name", "flavor")
     list_filter = ("family", "support_status")
     search_fields = ("name", "flavor")
+    fields = ("family", "name", "flavor", "support_status", "metadata")
 
     @admin.display(description="Name - Flavor")
     def name_flavor(self, obj):
@@ -132,6 +151,13 @@ class NetworkApprovalRequestAdmin(admin.ModelAdmin):
     list_display = ("asset", "status", "requested_by", "requested_at", "reviewed_by", "reviewed_at")
     list_filter = ("status",)
     search_fields = ("asset__name",)
+
+
+@admin.register(TaskRun)
+class TaskRunAdmin(admin.ModelAdmin):
+    list_display = ("task_name", "status", "started_at", "finished_at", "triggered_by")
+    list_filter = ("status", "task_name")
+    readonly_fields = ("task_name", "status", "started_at", "finished_at", "stdout", "result_data", "triggered_by")
 
 
 @admin.register(GuestDevice)

@@ -20,11 +20,13 @@
     </div>
   </div>
 
-  <section class="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+  {# Row 1: Identity + Hardware #}
+  <section class="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2">
     <article class="rounded-lg border border-slate-200 bg-white p-4">
-      <h2 class="mb-3 text-lg font-medium">General</h2>
+      <h2 class="mb-3 text-lg font-medium">Identity</h2>
       <dl class="grid grid-cols-1 gap-2 text-sm">
         <div><dt class="font-semibold text-slate-700">Type</dt><dd>{{ asset.get_asset_type_display }}</dd></div>
+        <div><dt class="font-semibold text-slate-700">Status</dt><dd>{{ asset.get_status_display }}</dd></div>
         <div>
           <dt class="font-semibold text-slate-700">Owner</dt>
           <dd class="flex items-center gap-2">
@@ -38,69 +40,12 @@
             {% endif %}
           </dd>
         </div>
-        <div><dt class="font-semibold text-slate-700">Status</dt><dd>{{ asset.get_status_display }}</dd></div>
         <div><dt class="font-semibold text-slate-700">Asset Tag</dt><dd>{{ asset.asset_tag|default:"-" }}</dd></div>
-        <div><dt class="font-semibold text-slate-700">Serial / Manufacturer tag</dt><dd>{{ asset.serial_number|default:"-" }}</dd></div>
-        <div><dt class="font-semibold text-slate-700">Manufacturer</dt><dd>{{ asset.manufacturer|default:"-" }}</dd></div>
-        <div><dt class="font-semibold text-slate-700">Model</dt><dd>{{ asset.model|default:"-" }}</dd></div>
         <div>
           <dt class="font-semibold text-slate-700">Location</dt>
           <dd>
             {% if asset.location %}
               <a href="{% url 'inventory:location-detail' asset.location.id asset.location.slug %}" class="hover:text-blue-700">{{ asset.location.path_label }}</a>
-            {% else %}
-              -
-            {% endif %}
-          </dd>
-        </div>
-        <div><dt class="font-semibold text-slate-700">Commissioning date</dt><dd>{{ asset.commissioning_date|default:"-" }}</dd></div>
-        <div>
-          <dt class="font-semibold text-slate-700">Tags</dt>
-          <dd class="mt-1 flex flex-wrap gap-1">
-            {% for tag in asset.tags.all %}
-              <span class="rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-800">{{ tag.name }}</span>
-            {% empty %}
-              <span>-</span>
-            {% endfor %}
-          </dd>
-        </div>
-        <div><dt class="font-semibold text-slate-700">End of lifetime</dt><dd>{{ asset.end_of_lifetime|default:"-" }}</dd></div>
-        {% if asset.lifetime_override_months %}
-          <div><dt class="font-semibold text-slate-700">Lifetime override</dt><dd>{{ asset.lifetime_override_months }} months</dd></div>
-        {% endif %}
-        <div>
-          <dt class="font-semibold text-slate-700">Description</dt>
-          <dd class="mt-1 rounded border border-slate-200 bg-slate-50 p-3">
-            {% if asset.notes %}
-              <div class="text-sm text-slate-800 [&>h1]:mb-2 [&>h1]:text-lg [&>h2]:mb-2 [&>h2]:text-base [&>p]:mb-2 [&>ul]:mb-2 [&>ul]:list-disc [&>ul]:pl-5 [&>ol]:mb-2 [&>ol]:list-decimal [&>ol]:pl-5 [&>pre]:overflow-x-auto [&>pre]:rounded [&>pre]:bg-slate-900 [&>pre]:p-2 [&>pre]:text-slate-100">
-                {{ asset.notes|render_markdown }}
-              </div>
-            {% else %}
-              <span class="text-slate-500">No description.</span>
-            {% endif %}
-          </dd>
-        </div>
-      </dl>
-    </article>
-
-    <article class="rounded-lg border border-slate-200 bg-white p-4">
-      <h2 class="mb-3 text-lg font-medium">OS & Groups</h2>
-      <dl class="grid grid-cols-1 gap-2 text-sm">
-        <div>
-          <dt class="font-semibold text-slate-700">Operating system</dt>
-          <dd>
-            {% if asset.os_entries.all %}
-              <div class="space-y-1">
-                {% for os in asset.os_entries.all %}
-                  <div class="rounded border border-slate-200 bg-slate-50 px-2 py-1">
-                    <div>{{ os.family.name_flavor }}{% if os.version %} {{ os.version }}{% endif %}</div>
-                    <div class="text-xs text-slate-600">
-                      {% if os.patch_level %}Patch: {{ os.patch_level }} | {% endif %}
-                      Support: {{ os.get_support_state_display }} | Auto updates: {% if os.auto_updates_enabled %}On{% else %}Off{% endif %}
-                    </div>
-                  </div>
-                {% endfor %}
-              </div>
             {% else %}
               -
             {% endif %}
@@ -116,78 +61,133 @@
             {% endfor %}
           </dd>
         </div>
+        <div>
+          <dt class="font-semibold text-slate-700">Tags</dt>
+          <dd class="mt-1 flex flex-wrap gap-1">
+            {% for tag in asset.tags.all %}
+              <span class="rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-800">{{ tag.name }}</span>
+            {% empty %}
+              <span>-</span>
+            {% endfor %}
+          </dd>
+        </div>
+      </dl>
+    </article>
+
+    <article class="rounded-lg border border-slate-200 bg-white p-4">
+      <h2 class="mb-3 text-lg font-medium">Hardware</h2>
+      <dl class="grid grid-cols-1 gap-2 text-sm">
+        <div><dt class="font-semibold text-slate-700">Manufacturer</dt><dd>{{ asset.manufacturer|default:"-" }}</dd></div>
+        <div><dt class="font-semibold text-slate-700">Model</dt><dd>{{ asset.model|default:"-" }}</dd></div>
+        <div><dt class="font-semibold text-slate-700">Serial / Manufacturer tag</dt><dd>{{ asset.serial_number|default:"-" }}</dd></div>
+        <div><dt class="font-semibold text-slate-700">Commissioning date</dt><dd>{{ asset.commissioning_date|default:"-" }}</dd></div>
+        <div><dt class="font-semibold text-slate-700">End of lifetime</dt><dd>{{ asset.end_of_lifetime|default:"-" }}</dd></div>
+        {% if asset.lifetime_override_months %}
+          <div><dt class="font-semibold text-slate-700">Lifetime override</dt><dd>{{ asset.lifetime_override_months }} months</dd></div>
+        {% endif %}
+        <div><dt class="font-semibold text-slate-700">Last seen</dt><dd>{% if asset.last_seen %}{{ asset.last_seen|date:"Y-m-d H:i" }}{% else %}-{% endif %}</dd></div>
+      </dl>
+    </article>
+  </section>
+
+  {# Row 2: OS & Software + Description #}
+  <section class="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+    <article class="rounded-lg border border-slate-200 bg-white p-4">
+      <h2 class="mb-3 text-lg font-medium">OS & Software</h2>
+      <dl class="text-sm">
+        <dt class="font-semibold text-slate-700">Operating system</dt>
+        <dd>
+          {% if asset.os_entries.all %}
+            <div class="mt-1 space-y-1">
+              {% for os in asset.os_entries.all %}
+                <div class="rounded border border-slate-200 bg-slate-50 px-2 py-1">
+                  <div>{{ os.family.name_flavor }}{% if os.version %} {{ os.version }}{% endif %}</div>
+                  <div class="text-xs text-slate-600">
+                    {% if os.patch_level %}Patch: {{ os.patch_level }} | {% endif %}
+                    Support: {{ os.get_support_state_display }} | Auto updates: {% if os.auto_updates_enabled %}On{% else %}Off{% endif %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            -
+          {% endif %}
+        </dd>
       </dl>
       <details class="mt-4 rounded border border-slate-200 bg-slate-50 p-3">
         <summary class="cursor-pointer text-sm font-semibold text-slate-700">Metadata (JSON)</summary>
         <pre class="mt-2 overflow-x-auto rounded bg-slate-900 p-3 text-xs text-slate-100">{{ asset.metadata|pretty_json }}</pre>
       </details>
     </article>
+
+    <article class="rounded-lg border border-slate-200 bg-white p-4">
+      <h2 class="mb-3 text-lg font-medium">Description</h2>
+      {% if asset.notes %}
+        <div class="text-sm text-slate-800 [&>h1]:mb-2 [&>h1]:text-lg [&>h2]:mb-2 [&>h2]:text-base [&>p]:mb-2 [&>ul]:mb-2 [&>ul]:list-disc [&>ul]:pl-5 [&>ol]:mb-2 [&>ol]:list-decimal [&>ol]:pl-5 [&>pre]:overflow-x-auto [&>pre]:rounded [&>pre]:bg-slate-900 [&>pre]:p-2 [&>pre]:text-slate-100">
+          {{ asset.notes|render_markdown }}
+        </div>
+      {% else %}
+        <p class="text-sm text-slate-500">No description.</p>
+      {% endif %}
+    </article>
   </section>
 
-  <section class="rounded-lg border border-slate-200 bg-white p-4">
+  {# Row 3: Ports & Interfaces #}
+  <section class="mb-4 rounded-lg border border-slate-200 bg-white p-4">
     <h2 class="mb-3 text-lg font-medium">Ports & Interfaces</h2>
-    <div class="overflow-x-auto">
-      <table class="min-w-full divide-y divide-slate-200 text-sm">
-        <thead class="bg-slate-50">
-          <tr>
-            <th class="px-3 py-2 text-left font-medium text-slate-600">Type</th>
-            <th class="px-3 py-2 text-left font-medium text-slate-600">Name / Identifier</th>
-            <th class="px-3 py-2 text-left font-medium text-slate-600">Details</th>
-            <th class="px-3 py-2 text-left font-medium text-slate-600">IPs</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-200">
-          {% for item in ports_tree %}
-            <tr>
-              <td class="px-3 py-2 font-semibold text-slate-800">Port</td>
-              <td class="px-3 py-2 font-semibold text-slate-900">{{ item.port.name }}</td>
-              <td class="px-3 py-2">{{ item.port.get_port_kind_display }}</td>
-              <td class="px-3 py-2 text-slate-500">-</td>
-            </tr>
+    <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+      {% for item in ports_tree %}
+        <article class="rounded-lg border border-slate-200 bg-white text-sm">
+          <div class="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
+            <span class="font-semibold text-slate-900">{{ item.port.name }}</span>
+            <span class="rounded bg-slate-200 px-1.5 py-0.5 text-xs text-slate-600">{{ item.port.get_port_kind_display }}</span>
+          </div>
+          <div class="divide-y divide-slate-100 px-3">
             {% for interface in item.interfaces %}
-              <tr class="bg-slate-50/50">
-                <td class="px-3 py-2 text-slate-600">Interface</td>
-                <td class="px-3 py-2 pl-8">{{ interface.identifier }}</td>
-                <td class="px-3 py-2">
-                  MAC: {{ interface.mac_address|default:"-" }}
-                </td>
-                <td class="px-3 py-2">
-                  {% for ip in interface.ip_addresses.all %}
-                    <div>{{ ip.address }} ({{ ip.network.name }}){% if not ip.active %} - inactive{% endif %}</div>
-                  {% empty %}
-                    -
-                  {% endfor %}
-                </td>
-              </tr>
-            {% empty %}
-              <tr class="bg-slate-50/50">
-                <td class="px-3 py-2 text-slate-600">Interface</td>
-                <td class="px-3 py-2 pl-8 text-slate-500" colspan="3">No interfaces under this port.</td>
-              </tr>
-            {% endfor %}
-          {% empty %}
-            <tr><td class="px-3 py-2 text-slate-500" colspan="4">No ports.</td></tr>
-          {% endfor %}
-          {% for interface in unassigned_interfaces %}
-            <tr class="bg-amber-50">
-              <td class="px-3 py-2 text-amber-700">Interface</td>
-              <td class="px-3 py-2">Unassigned / {{ interface.identifier }}</td>
-              <td class="px-3 py-2">MAC: {{ interface.mac_address|default:"-" }}</td>
-              <td class="px-3 py-2">
+              <div class="py-2">
+                <div class="flex items-center gap-2">
+                  <span class="font-medium text-slate-800">{{ interface.identifier }}</span>
+                  {% if interface.mac_address %}
+                    <span class="text-xs text-slate-500">{{ interface.mac_address }}</span>
+                  {% endif %}
+                </div>
                 {% for ip in interface.ip_addresses.all %}
-                  <div>{{ ip.address }} ({{ ip.network.name }}){% if not ip.active %} - inactive{% endif %}</div>
-                {% empty %}
-                  -
+                  <div class="mt-0.5 text-xs text-slate-600">{{ ip.address }} <span class="text-slate-400">({{ ip.network.name }})</span>{% if not ip.active %} <span class="text-amber-600">inactive</span>{% endif %}</div>
                 {% endfor %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+              </div>
+            {% empty %}
+              <p class="py-2 text-slate-500">No interfaces.</p>
+            {% endfor %}
+          </div>
+        </article>
+      {% empty %}
+        <p class="text-sm text-slate-500 md:col-span-2 xl:col-span-3">No ports.</p>
+      {% endfor %}
+      {% for interface in unassigned_interfaces %}
+        <article class="rounded-lg border border-amber-300 bg-amber-50 text-sm">
+          <div class="flex items-center gap-2 border-b border-amber-200 bg-amber-100/50 px-3 py-2">
+            <span class="font-semibold text-amber-800">{{ interface.identifier }}</span>
+            <span class="rounded bg-amber-200 px-1.5 py-0.5 text-xs text-amber-700">Unassigned</span>
+          </div>
+          <div class="px-3 py-2">
+            <div class="flex items-center gap-2">
+              {% if interface.mac_address %}
+                <span class="text-xs text-slate-600">MAC: {{ interface.mac_address }}</span>
+              {% else %}
+                <span class="text-xs text-slate-400">No MAC</span>
+              {% endif %}
+            </div>
+            {% for ip in interface.ip_addresses.all %}
+              <div class="mt-0.5 text-xs text-slate-600">{{ ip.address }} <span class="text-slate-400">({{ ip.network.name }})</span>{% if not ip.active %} <span class="text-amber-600">inactive</span>{% endif %}</div>
+            {% endfor %}
+          </div>
+        </article>
+      {% endfor %}
     </div>
   </section>
 
-  <section class="mt-6 rounded-lg border border-slate-200 bg-white p-4">
+  {# Row 4: Network Approval #}
+  <section class="mb-4 rounded-lg border border-slate-200 bg-white p-4">
     <h2 class="mb-3 text-lg font-medium">Network Approval</h2>
     <div class="text-sm">
       <p class="mb-2">
@@ -210,6 +210,15 @@
           <button type="submit" class="rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700">Request approval</button>
         </form>
       {% endif %}
+      {% if request.user.is_staff and latest_approval and latest_approval.status == 'PENDING' %}
+        <form method="post" action="{% url 'inventory:asset-approval-action' latest_approval.pk %}" class="mt-3 flex items-center gap-2 rounded border border-amber-200 bg-amber-50 p-3">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{% url 'inventory:asset-detail' asset.pk %}">
+          <input type="text" name="review_note" placeholder="Optional note..." class="h-8 rounded border border-slate-300 px-2 text-sm">
+          <button type="submit" name="action" value="approve" class="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700">Approve</button>
+          <button type="submit" name="action" value="reject" class="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700">Reject</button>
+        </form>
+      {% endif %}
       {% if latest_approval %}
         <div class="mt-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
           <p>Requested by: {{ latest_approval.requested_by.email }} on {{ latest_approval.requested_at|date:"Y-m-d H:i" }}</p>
@@ -223,8 +232,9 @@
     </div>
   </section>
 
+  {# Row 5: Change History #}
   {% if history %}
-    <section class="mt-6">
+    <section>
       <details class="rounded-lg border border-slate-200 bg-white">
         <summary class="cursor-pointer px-4 py-3 text-lg font-medium">Change history</summary>
         <div class="overflow-x-auto border-t border-slate-200">
