@@ -205,12 +205,49 @@ def _create_or_update_user(email: str, first_name: str, last_name: str, entra_da
         return {"created": created}
 
 
-def _sync_windows_os_entry(asset, os_version: str) -> None:
+def _fetch_windows_build_labels() -> dict[int, str]:
+    """Fetch Windows build number → releaseLabel mapping from endoflife.date.
+
+    Returns an empty dict if the API is unavailable, so callers can safely
+    skip setting AssetOS.version without failing the whole sync.
+    Prefers the workstation (-w) variant when multiple editions share a build.
+    """
+    import urllib.request
+    import json as _json
+
+    url = "https://endoflife.date/api/windows.json"
+    try:
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            data = _json.loads(resp.read())
+    except Exception as exc:
+        logger.warning("Could not fetch Windows release data from %s: %s", url, exc)
+        return {}
+
+    result: dict[int, str] = {}
+    for entry in data:
+        latest = entry.get("latest", "")
+        label = entry.get("releaseLabel", "")
+        parts = latest.split(".")
+        if len(parts) < 3:
+            continue
+        try:
+            build_num = int(parts[2])
+        except ValueError:
+            continue
+        # Prefer workstation (-w) variant; only overwrite if slot is still empty
+        cycle = entry.get("cycle", "")
+        if build_num not in result or cycle.endswith("-w"):
+            result[build_num] = label
+
+    return result
+
+
+def _sync_windows_os_entry(asset, os_version: str, build_label_map: dict[int, str]) -> None:
     """Sync Windows OS entry for an asset based on Entra OS version string.
 
-    Parses the build number from a version like "10.0.26200.7840", finds
-    a matching OSFamily via metadata__build_numbers, and creates/updates
-    the first Windows AssetOS entry on the asset.
+    Sets patch_level to the raw Entra version (e.g. "10.0.26200.7840") and
+    version to the human-readable releaseLabel (e.g. "11 25H2 (W)") when
+    the build number is found in build_label_map.
     """
     from inventory.models import AssetOS, OSFamily
 
@@ -220,43 +257,40 @@ def _sync_windows_os_entry(asset, os_version: str) -> None:
     if len(parts) >= 3:
         try:
             build_num = int(parts[2])
-        except (ValueError, IndexError):
+        except ValueError:
             pass
 
-    os_family = None
-    if build_num is not None:
-        os_family = OSFamily.objects.filter(
-            family="windows",
-            metadata__build_numbers__contains=build_num,
-        ).first()
-
+    os_family = OSFamily.objects.filter(family="windows").first()
     if os_family is None:
-        os_family = OSFamily.objects.filter(family="windows").first()
-        if os_family is None:
-            logger.warning("No Windows OSFamily found; skipping OS entry for %s", asset.name)
-            return
-        if build_num is not None:
-            logger.warning(
-                "No Windows OSFamily with build_number %s; falling back to generic '%s' for %s",
-                build_num, os_family, asset.name,
-            )
+        logger.warning("No Windows OSFamily found; skipping OS entry for %s", asset.name)
+        return
+
+    release_label = build_label_map.get(build_num, "") if build_num is not None else ""
 
     existing = asset.os_entries.filter(family__family="windows").order_by("id").first()
     if existing:
-        changed = False
+        update_fields = []
         if existing.patch_level != os_version:
             existing.patch_level = os_version
-            changed = True
+            update_fields.append("patch_level")
         if existing.family_id != os_family.pk:
             existing.family = os_family
-            changed = True
-        if changed:
-            existing.save(update_fields=["patch_level", "family"])
+            update_fields.append("family")
+        if release_label and existing.version != release_label:
+            existing.version = release_label
+            update_fields.append("version")
+        if update_fields:
+            existing.save(update_fields=update_fields)
     else:
-        AssetOS.objects.create(asset=asset, family=os_family, patch_level=os_version)
+        AssetOS.objects.create(
+            asset=asset,
+            family=os_family,
+            patch_level=os_version,
+            version=release_label,
+        )
 
 
-def _update_asset_entra_metadata(asset, entra_data: dict, deep_update: bool = False) -> None:
+def _update_asset_entra_metadata(asset, entra_data: dict, deep_update: bool = False, build_label_map: dict | None = None) -> None:
     """Update asset metadata with Entra device data (synchronous).
     
     Args:
@@ -342,7 +376,7 @@ def _update_asset_entra_metadata(asset, entra_data: dict, deep_update: bool = Fa
             os_name = entra_data.get("operating_system", "")
             os_version = entra_data.get("operating_system_version", "")
             if os_name and "windows" in os_name.lower() and os_version:
-                _sync_windows_os_entry(asset, os_version)
+                _sync_windows_os_entry(asset, os_version, build_label_map or {})
 
         asset.save(update_fields=update_fields)
 
@@ -493,7 +527,13 @@ async def _sync_devices_from_o365_async(dry_run: bool = False, deep_update: bool
         dict: Summary of the sync operation
     """
     logger.info(f"Starting device synchronization from O365 (dry_run={dry_run}, deep_update={deep_update})")
-    
+
+    build_label_map = _fetch_windows_build_labels()
+    if build_label_map:
+        print(f"Loaded Windows release labels for {len(build_label_map)} build numbers.")
+    else:
+        print("Windows release label data unavailable; AssetOS.version will not be set.")
+
     try:
         client = get_graph_client()
         
@@ -590,7 +630,7 @@ async def _sync_devices_from_o365_async(dry_run: bool = False, deep_update: bool
                 
                 # Update asset metadata with Entra data (unless dry run)
                 if not dry_run:
-                    await sync_to_async(_update_asset_entra_metadata)(asset, entra_data, deep_update)
+                    await sync_to_async(_update_asset_entra_metadata)(asset, entra_data, deep_update, build_label_map)
                 
                 matched_count += 1
                 if dry_run:
