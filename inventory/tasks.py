@@ -216,11 +216,14 @@ def _fetch_windows_build_labels() -> dict[int, str]:
     import json as _json
 
     url = "https://endoflife.date/api/windows.json"
+    print(f"Fetching Windows release data from {url} ...")
     try:
         with urllib.request.urlopen(url, timeout=10) as resp:
             data = _json.loads(resp.read())
     except Exception as exc:
         logger.warning("Could not fetch Windows release data from %s: %s", url, exc)
+        print(f"  WARNING: fetch failed – {exc}")
+        print("  AssetOS.version will not be updated.")
         return {}
 
     result: dict[int, str] = {}
@@ -239,15 +242,17 @@ def _fetch_windows_build_labels() -> dict[int, str]:
         if build_num not in result or cycle.endswith("-w"):
             result[build_num] = label
 
+    print(f"  OK – {len(result)} build numbers loaded ({len(data)} cycles in source).")
     return result
 
 
 def _sync_windows_os_entry(asset, os_version: str, build_label_map: dict[int, str]) -> None:
     """Sync Windows OS entry for an asset based on Entra OS version string.
 
-    Sets patch_level to the raw Entra version (e.g. "10.0.26200.7840") and
-    version to the human-readable releaseLabel (e.g. "11 25H2 (W)") when
-    the build number is found in build_label_map.
+    - If no Windows AssetOS entry exists, creates one using the first available
+      Windows OSFamily (generic fallback).
+    - If an entry already exists, keeps its family unchanged and only updates
+      patch_level and version.
     """
     from inventory.models import AssetOS, OSFamily
 
@@ -260,11 +265,6 @@ def _sync_windows_os_entry(asset, os_version: str, build_label_map: dict[int, st
         except ValueError:
             pass
 
-    os_family = OSFamily.objects.filter(family="windows").first()
-    if os_family is None:
-        logger.warning("No Windows OSFamily found; skipping OS entry for %s", asset.name)
-        return
-
     release_label = build_label_map.get(build_num, "") if build_num is not None else ""
 
     existing = asset.os_entries.filter(family__family="windows").order_by("id").first()
@@ -273,15 +273,16 @@ def _sync_windows_os_entry(asset, os_version: str, build_label_map: dict[int, st
         if existing.patch_level != os_version:
             existing.patch_level = os_version
             update_fields.append("patch_level")
-        if existing.family_id != os_family.pk:
-            existing.family = os_family
-            update_fields.append("family")
         if release_label and existing.version != release_label:
             existing.version = release_label
             update_fields.append("version")
         if update_fields:
             existing.save(update_fields=update_fields)
     else:
+        os_family = OSFamily.objects.filter(family="windows").first()
+        if os_family is None:
+            logger.warning("No Windows OSFamily found; skipping OS entry for %s", asset.name)
+            return
         AssetOS.objects.create(
             asset=asset,
             family=os_family,
@@ -529,10 +530,6 @@ async def _sync_devices_from_o365_async(dry_run: bool = False, deep_update: bool
     logger.info(f"Starting device synchronization from O365 (dry_run={dry_run}, deep_update={deep_update})")
 
     build_label_map = _fetch_windows_build_labels()
-    if build_label_map:
-        print(f"Loaded Windows release labels for {len(build_label_map)} build numbers.")
-    else:
-        print("Windows release label data unavailable; AssetOS.version will not be set.")
 
     try:
         client = get_graph_client()
